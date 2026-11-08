@@ -4,7 +4,7 @@ import SwiftUI
 /// 可自定义的选项列表
 enum OptionKey: String, CaseIterable, Codable, Identifiable {
     case ranks, channels, bodyTypes, cups, personality, maritalStatus, education, contactTypes
-    case positions, play, activities, moods, expenseCategories, giftOccasions, tags
+    case positions, play, activities, moods, expenseCategories, giftOccasions, tags, todoCategories
 
     var id: String { rawValue }
 
@@ -25,6 +25,7 @@ enum OptionKey: String, CaseIterable, Codable, Identifiable {
         case .expenseCategories: return "花费类别"
         case .giftOccasions: return "送礼场合"
         case .tags: return "档案标签"
+        case .todoCategories: return "待办分类"
         }
     }
 
@@ -45,6 +46,7 @@ enum OptionKey: String, CaseIterable, Codable, Identifiable {
         case .expenseCategories: return ["酒店", "餐饮", "礼物", "交通", "娱乐", "红包", "其他"]
         case .giftOccasions: return ["生日", "情人节", "520", "七夕", "圣诞", "纪念日", "日常", "红包", "转账"]
         case .tags: return []
+        case .todoCategories: return ["约会", "礼物", "联系", "健康", "其他"]
         }
     }
 }

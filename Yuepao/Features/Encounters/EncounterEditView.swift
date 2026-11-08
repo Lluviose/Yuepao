@@ -23,9 +23,9 @@ struct EncounterEditView: View {
 
     private let originalPhotos: Set<String>
 
-    init(encounter: Encounter?, presetGirls: [Girl]) {
+    init(encounter: Encounter?, presetGirls: [Girl], presetDate: Date? = nil) {
         self.encounter = encounter
-        _date = State(initialValue: encounter?.date ?? Date())
+        _date = State(initialValue: encounter?.date ?? Self.defaultDate(for: presetDate))
         _durationMinutes = State(initialValue: encounter?.durationMinutes ?? 0)
         _overnight = State(initialValue: encounter?.overnight ?? false)
         _count = State(initialValue: encounter?.count ?? 1)
@@ -38,6 +38,28 @@ struct EncounterEditView: View {
         _place = State(initialValue: encounter?.place)
         _showMore = State(initialValue: encounter != nil)
         originalPhotos = Set(d.photoIDs)
+    }
+
+    /// 从日历选了某天时：今天用现在的时间，其他日子默认晚上 9 点
+    private static func defaultDate(for day: Date?) -> Date {
+        guard let day, !Calendar.current.isDateInToday(day) else { return Date() }
+        return Calendar.current.date(bySettingHour: 21, minute: 0, second: 0, of: day) ?? day
+    }
+
+    /// 选中对象在这天的周期提示
+    private var cycleHints: [(text: String, color: Color)] {
+        girls.compactMap { (girl: Girl) -> (text: String, color: Color)? in
+            let info = girl.details.cycle
+            guard info.hasData else { return nil }
+            switch info.kind(on: date) {
+            case .period(let predicted):
+                return ("「\(girl.name)」这天\(predicted ? "可能" : "")在经期", Palette.period)
+            case .fertile, .ovulation:
+                return ("「\(girl.name)」这天在易孕期，注意避孕", Palette.fertile)
+            case .none:
+                return nil
+            }
+        }
     }
 
     private var isRisky: Bool {
@@ -113,7 +135,7 @@ struct EncounterEditView: View {
     // MARK: Sections
 
     private var whoSection: some View {
-        Section("对象和地点") {
+        Section {
             NavigationLink {
                 GirlMultiSelectView(selection: $girls)
             } label: {
@@ -131,6 +153,19 @@ struct EncounterEditView: View {
                         .foregroundStyle(place == nil ? HierarchicalShapeStyle.tertiary : HierarchicalShapeStyle.secondary)
                         .lineLimit(1)
                 }
+            }
+        } header: {
+            Text("对象和地点")
+        } footer: {
+            let hints = cycleHints
+            if !hints.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(hints, id: \.text) { hint in
+                        Label(hint.text, systemImage: "drop.fill")
+                            .foregroundStyle(hint.color)
+                    }
+                }
+                .transition(.opacity)
             }
         }
     }

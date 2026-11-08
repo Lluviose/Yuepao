@@ -93,6 +93,27 @@ final class HealthTest {
     }
 }
 
+// MARK: - 待办
+
+@Model
+final class TodoItem {
+    var id: UUID = UUID()
+    var createdAt: Date = Date()
+    var title: String = ""
+    var notes: String = ""
+    var dueDate: Date?
+    var hasTime: Bool = false
+    var remind: Bool = true
+    var isDone: Bool = false
+    var doneAt: Date?
+    var girlID: UUID?
+    var category: String = ""
+
+    init(title: String = "") {
+        self.title = title
+    }
+}
+
 // MARK: - Convenience
 
 extension Girl {
@@ -191,4 +212,24 @@ extension Place {
     var lastUsed: Date? { encounters.map(\.date).max() }
 
     var displayName: String { name.isEmpty ? type.title : name }
+}
+
+extension TodoItem {
+    /// 提醒 / 排序用的时间点：有具体时间用时间，没有就当天 9 点
+    var fireDate: Date? {
+        guard let dueDate else { return nil }
+        if hasTime { return dueDate }
+        return Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: dueDate)
+    }
+
+    var isOverdue: Bool {
+        guard !isDone, let dueDate else { return false }
+        if hasTime { return dueDate < Date() }
+        return Calendar.current.startOfDay(for: dueDate) < Calendar.current.startOfDay(for: Date())
+    }
+
+    var isDueToday: Bool {
+        guard let dueDate else { return false }
+        return Calendar.current.isDateInToday(dueDate)
+    }
 }

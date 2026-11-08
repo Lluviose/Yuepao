@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 enum Persistence {
-    static let schema = Schema([Girl.self, Encounter.self, Place.self, HealthTest.self])
+    static let schema = Schema([Girl.self, Encounter.self, Place.self, HealthTest.self, TodoItem.self])
 
     /// 打开数据库失败时的错误描述（这时会退回内存数据库，避免崩溃丢数据）
     private(set) static var loadError: String?

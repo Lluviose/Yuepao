@@ -13,6 +13,7 @@ struct GirlListView: View {
     @State private var rankFilter: String?
     @State private var creating = false
     @State private var pendingDelete: Girl?
+    @Namespace private var zoom
 
     private var sort: GirlSort { GirlSort(rawValue: sortRaw) ?? .recent }
 
@@ -54,8 +55,10 @@ struct GirlListView: View {
                 ForEach(filtered) { girl in
                     NavigationLink {
                         GirlDetailView(girl: girl)
+                            .zoomDestination(id: girl.id, in: zoom)
                     } label: {
                         GirlRow(girl: girl)
+                            .zoomSource(id: girl.id, in: zoom)
                     }
                     .swipeActions {
                         Button("删除", role: .destructive) { pendingDelete = girl }
@@ -161,7 +164,7 @@ struct SummaryCell: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(value).font(.title2.weight(.semibold)).monospacedDigit()
+            Text(value).font(.title2.weight(.semibold)).statNumber()
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -190,7 +193,7 @@ struct GirlRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(girl.encounters.count)")
                     .font(.title3.weight(.semibold))
-                    .monospacedDigit()
+                    .statNumber()
                 Text("次").font(.caption2).foregroundStyle(.secondary)
             }
         }

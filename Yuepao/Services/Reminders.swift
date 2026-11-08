@@ -6,6 +6,7 @@ enum Reminders {
     static var enabled: Bool { UserDefaults.standard.bool(forKey: "notificationsEnabled") }
     static var discreet: Bool { UserDefaults.standard.object(forKey: "discreetNotifications") as? Bool ?? true }
     static var riskEnabled: Bool { UserDefaults.standard.object(forKey: "riskReminders") as? Bool ?? true }
+    static var periodEnabled: Bool { UserDefaults.standard.object(forKey: "periodReminders") as? Bool ?? false }
 
     private static let datePrefix = "date-"
     private static let riskPrefix = "risk-"
@@ -62,8 +63,29 @@ enum Reminders {
             }
         }
 
-        // iOS 最多保留 64 条待发通知，按最近的排
-        let sorted = events.sorted { daysUntilNext($0.date) < daysUntilNext($1.date) }.prefix(28)
+        // 经期提醒：预计开始的前一天晚上
+        if periodEnabled {
+            let candidates = girls.filter { $0.status.isCurrent }
+                .compactMap { g -> (Girl, Date)? in
+                    guard let next = g.details.cycle.nextStart else { return nil }
+                    return (g, next)
+                }
+                .sorted { $0.1 < $1.1 }
+                .prefix(8)
+            for (girl, next) in candidates {
+                guard let dayBefore = Calendar.current.date(byAdding: .day, value: -1, to: next),
+                      let fire = Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: dayBefore),
+                      fire > Date() else { continue }
+                let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+                result.append(UNNotificationRequest(
+                    identifier: "\(datePrefix)period-\(girl.id)",
+                    content: content(title: "经期提醒", body: "「\(girl.name)」明天可能来例假"),
+                    trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+            }
+        }
+
+        // iOS 最多保留 64 条待发通知，按最近的排，给待办留出空间
+        let sorted = events.sorted { daysUntilNext($0.date) < daysUntilNext($1.date) }.prefix(18)
         let cal = Calendar.current
         for event in sorted {
             let md = cal.dateComponents([.month, .day], from: event.date)
@@ -103,6 +125,22 @@ enum Reminders {
             return 999
         }
         return cal.dateComponents([.day], from: today, to: next).day ?? 999
+    }
+
+    // MARK: 待办
+
+    static func scheduleTodo(_ todo: TodoItem, girlName: String?) {
+        cancelTodo(id: todo.id)
+        guard enabled, todo.remind, !todo.isDone, let fire = todo.fireDate, fire > Date() else { return }
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        let body = girlName.map { "\(todo.title)（\($0)）" } ?? todo.title
+        add(id: "todo-\(todo.id)",
+            content: content(title: "待办", body: body),
+            trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false))
+    }
+
+    static func cancelTodo(id: UUID) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["todo-\(id)"])
     }
 
     // MARK: 风险提醒

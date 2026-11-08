@@ -149,12 +149,18 @@ enum MarkerRenderer {
                 let w = image.size.width * scale, h = image.size.height * scale
                 image.draw(in: CGRect(x: inner.midX - w / 2, y: inner.midY - h / 2, width: w, height: h))
             } else {
-                UIColor.systemGray5.setFill()
-                UIRectFill(inner)
+                let (top, bottom) = Palette.avatarUIColors(for: name)
+                if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                             colors: [top.cgColor, bottom.cgColor] as CFArray,
+                                             locations: [0, 1]) {
+                    UIGraphicsGetCurrentContext()?.drawLinearGradient(
+                        gradient, start: CGPoint(x: inner.minX, y: inner.minY),
+                        end: CGPoint(x: inner.maxX, y: inner.maxY), options: [])
+                }
                 let initial = String(name.prefix(1)) as NSString
                 let attrs: [NSAttributedString.Key: Any] = [
                     .font: UIFont.systemFont(ofSize: 18, weight: .semibold),
-                    .foregroundColor: UIColor.secondaryLabel
+                    .foregroundColor: UIColor.white
                 ]
                 let s = initial.size(withAttributes: attrs)
                 initial.draw(at: CGPoint(x: inner.midX - s.width / 2, y: inner.midY - s.height / 2), withAttributes: attrs)

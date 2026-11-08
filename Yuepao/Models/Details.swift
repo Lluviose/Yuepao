@@ -64,7 +64,9 @@ struct GirlDetails: Codable {
     var contraception: String = ""
 
     // G. 周期
+    /// 旧版本只记开始日期，读取时会自动转成 `periods`
     var periodStarts: [Date] = []
+    var periods: [PeriodEntry] = []
     var periodLength: Int = 5
 
     // H. 重要日期 / 礼物 / 时间线
@@ -84,37 +86,36 @@ struct GirlDetails: Codable {
 
     var giftSpending: Double { gifts.reduce(0) { $0 + $1.amount } }
 
-    /// 平均周期（天），数据不足时用 28
-    var averageCycle: Int {
-        let sorted = periodStarts.sorted()
-        guard sorted.count >= 2 else { return 28 }
-        var diffs: [Int] = []
-        for i in 1..<sorted.count {
-            let days = Calendar.current.dateComponents([.day], from: sorted[i - 1], to: sorted[i]).day ?? 0
-            if (18...50).contains(days) { diffs.append(days) }
-        }
-        let recent = diffs.suffix(6)
-        guard !recent.isEmpty else { return 28 }
-        return Int((Double(recent.reduce(0, +)) / Double(recent.count)).rounded())
+    /// 所有经期记录（兼容旧数据），按开始日期升序
+    var periodEntries: [PeriodEntry] {
+        let list = periods.isEmpty ? periodStarts.map { PeriodEntry(start: $0) } : periods
+        return list.sorted { $0.start < $1.start }
     }
 
-    /// 预测下次经期开始日
-    var nextPeriod: Date? {
-        guard let last = periodStarts.max() else { return nil }
-        let cycle = averageCycle
-        var next = Calendar.current.date(byAdding: .day, value: cycle, to: last) ?? last
-        let today = Calendar.current.startOfDay(for: Date())
-        while next < today {
-            next = Calendar.current.date(byAdding: .day, value: cycle, to: next) ?? today
-        }
-        return next
+    var cycle: CycleInfo { CycleInfo(entries: periodEntries, defaultLength: periodLength) }
+
+    /// 记录一次经期开始（同一天重复点不会重复记）
+    mutating func startPeriod(on date: Date) {
+        let day = Calendar.current.startOfDay(for: date)
+        var list = periodEntries
+        if list.contains(where: { Calendar.current.isDate($0.start, inSameDayAs: day) }) { return }
+        list.append(PeriodEntry(start: day))
+        periods = list.sorted { $0.start < $1.start }
+        periodStarts = []
     }
 
-    /// 是否可能处于经期中
-    var possiblyOnPeriod: Bool {
-        guard let last = periodStarts.max() else { return false }
-        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: last), to: Calendar.current.startOfDay(for: Date())).day ?? 99
-        return days >= 0 && days < periodLength
+    /// 结束最近一次进行中的经期
+    mutating func endPeriod(on date: Date) {
+        var list = periodEntries
+        guard let i = list.lastIndex(where: { $0.start <= date }) else { return }
+        list[i].end = max(Calendar.current.startOfDay(for: date), list[i].start)
+        periods = list
+        periodStarts = []
+    }
+
+    mutating func setPeriods(_ list: [PeriodEntry]) {
+        periods = list.sorted { $0.start < $1.start }
+        periodStarts = []
     }
 
     var hasBodyInfo: Bool {
@@ -136,6 +137,13 @@ struct GirlDetails: Codable {
     var hasIntimacy: Bool {
         !likedPositions.isEmpty || !likedPlay.isEmpty || !sensitiveSpots.isEmpty || !boundaries.isEmpty || !contraception.isEmpty
     }
+}
+
+struct PeriodEntry: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var start: Date
+    /// 最后一天（含），nil 表示没记录结束
+    var end: Date?
 }
 
 struct ContactItem: Codable, Identifiable, Hashable {

@@ -28,9 +28,11 @@ struct RootView: View {
             MainTabView()
             if lock.isLocked {
                 LockScreen()
-                    .transition(.opacity)
+                    .transition(.opacity.combined(with: .scale(scale: 1.04)))
+                    .zIndex(2)
             } else if scenePhase != .active {
                 PrivacyCover()
+                    .zIndex(1)
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -46,18 +48,26 @@ struct RootView: View {
 }
 
 struct MainTabView: View {
+    @SceneStorage("selectedTab") private var tab = 0
+
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GirlListView()
                 .tabItem { Label("后宫", systemImage: "person.2.fill") }
+                .tag(0)
             EncounterListView()
                 .tabItem { Label("记录", systemImage: "heart.text.square.fill") }
+                .tag(1)
+            AgendaScreen()
+                .tabItem { Label("日程", systemImage: "calendar") }
+                .tag(2)
             HaremMapScreen()
                 .tabItem { Label("地图", systemImage: "map.fill") }
+                .tag(3)
             StatsView()
                 .tabItem { Label("统计", systemImage: "chart.bar.fill") }
-            SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tag(4)
         }
+        .sensoryFeedback(.selection, trigger: tab)
     }
 }

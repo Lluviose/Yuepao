@@ -94,25 +94,45 @@ final class AppLock: ObservableObject {
 
 struct LockScreen: View {
     @ObservedObject var lock = AppLock.shared
+    @State private var appeared = false
 
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground).ignoresSafeArea()
-            VStack(spacing: 20) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 44, weight: .semibold))
-                    .foregroundStyle(.tint)
-                Text("已锁定")
-                    .font(.title2.weight(.semibold))
+            BrandBackground()
+            VStack(spacing: 22) {
+                Spacer()
+                BrandGlyph(size: 84)
+                    .scaleEffect(appeared ? 1 : 0.85)
+                    .opacity(appeared ? 1 : 0)
+                VStack(spacing: 6) {
+                    Text("手账")
+                        .font(.title2.weight(.semibold))
+                        .fontDesign(.rounded)
+                    Label("已锁定", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .symbolEffect(.pulse, options: .repeating)
+                }
+                .opacity(appeared ? 1 : 0)
+                Spacer()
                 Button {
                     lock.authenticate()
                 } label: {
                     Label("使用\(AppLock.biometryName)解锁", systemImage: "faceid")
-                        .padding(.horizontal, 8)
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: 280)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
+                .padding(.bottom, 48)
+                .opacity(appeared ? 1 : 0)
             }
+            .padding(.horizontal, 32)
+        }
+        .onAppear {
+            withAnimation(.spring(duration: 0.6, bounce: 0.3)) { appeared = true }
         }
     }
 }
@@ -121,10 +141,40 @@ struct LockScreen: View {
 struct PrivacyCover: View {
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground).ignoresSafeArea()
-            Image(systemName: "book.closed.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.tint)
+            BrandBackground()
+            BrandGlyph(size: 72)
         }
+    }
+}
+
+struct BrandBackground: View {
+    var body: some View {
+        ZStack {
+            Color(uiColor: .systemBackground)
+            RadialGradient(colors: [Color.accentColor.opacity(0.18), .clear],
+                           center: .top, startRadius: 0, endRadius: 520)
+            RadialGradient(colors: [Color.orange.opacity(0.10), .clear],
+                           center: .bottomTrailing, startRadius: 0, endRadius: 420)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// 和 App 图标一致的笔记本图形
+struct BrandGlyph: View {
+    var size: CGFloat = 80
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+            .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.38, blue: 0.47),
+                                          Color(red: 0.96, green: 0.63, blue: 0.47)],
+                                 startPoint: .top, endPoint: .bottom))
+            .frame(width: size, height: size)
+            .overlay {
+                Image(systemName: "book.closed.fill")
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .shadow(color: Color.accentColor.opacity(0.35), radius: size * 0.2, y: size * 0.08)
     }
 }

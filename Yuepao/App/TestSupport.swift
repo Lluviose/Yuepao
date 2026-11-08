@@ -39,7 +39,14 @@ enum TestSupport {
             d.personality = ["温柔", "黏人"]; d.ratingLooks = 8; d.ratingOverall = 9; d.intimacy = 85
             d.favoriteFood = "日料、火锅"; d.taboos = "不要提她前任"
             d.saidNotes = [NoteItem(date: daysAgo(10, hour: 21), text: "下个月要去成都出差一周")]
-            d.periodStarts = [daysAgo(50, hour: 0), daysAgo(22, hour: 0)]
+            d.periods = [
+                PeriodEntry(start: cal.startOfDay(for: daysAgo(80, hour: 0)), end: cal.startOfDay(for: daysAgo(76, hour: 0))),
+                PeriodEntry(start: cal.startOfDay(for: daysAgo(51, hour: 0)), end: cal.startOfDay(for: daysAgo(47, hour: 0))),
+                PeriodEntry(start: cal.startOfDay(for: daysAgo(22, hour: 0)), end: cal.startOfDay(for: daysAgo(17, hour: 0)))
+            ]
+            d.memos = [NoteItem(date: daysAgo(3, hour: 22), text: "一起看了电影，她很喜欢那家日料"),
+                       NoteItem(date: daysAgo(40, hour: 21), text: "第一次去她家，养了一只橘猫")]
+            d.importantDates = [ImportantDate(title: "在一起纪念日", date: daysAgo(170, hour: 12), remind: true)]
             d.likedPositions = ["女上", "后入"]
             d.gifts = [GiftItem(date: daysAgo(30, hour: 12), item: "香水", amount: 980, occasion: "日常")]
             d.contactGoalDays = 5
@@ -96,6 +103,23 @@ enum TestSupport {
             e.girls = [item.0]
         }
         _ = lily
+
+        let todoPlan: [(String, Int?, Girl?, Bool)] = [
+            ("给小美准备生日礼物", 10, mei, false),
+            ("订周五晚上的餐厅", 0, xue, false),
+            ("回 Lily 消息", -1, lily, false),
+            ("去做一次检测", 5, nil, false),
+            ("买她喜欢的香水", nil, mei, false),
+            ("订酒店", -4, xue, true)
+        ]
+        for item in todoPlan {
+            let t = TodoItem(title: item.0)
+            context.insert(t)
+            t.dueDate = item.1.map { cal.startOfDay(for: cal.date(byAdding: .day, value: $0, to: Date()) ?? Date()) }
+            t.girlID = item.2?.id
+            t.isDone = item.3
+            t.doneAt = item.3 ? daysAgo(4, hour: 18) : nil
+        }
         try? context.save()
         #endif
     }

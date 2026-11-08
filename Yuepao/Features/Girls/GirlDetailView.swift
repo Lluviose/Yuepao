@@ -7,15 +7,23 @@ struct GirlDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Girl.createdAt) private var allGirls: [Girl]
+    @Query(sort: \TodoItem.createdAt, order: .reverse) private var allTodos: [TodoItem]
     @ObservedObject private var config = ConfigStore.shared
 
     @State private var sheet: DetailSheet?
     @State private var showSensitive = false
     @State private var confirmDelete = false
+    @State private var editingTodo: TodoItem?
+    @State private var contactPulse = 0
 
     enum DetailSheet: String, Identifiable {
-        case edit, encounter, memo, said, gift, date, period
+        case edit, encounter, memo, said, gift, date, period, todo
         var id: String { rawValue }
+    }
+
+    private var herTodos: [TodoItem] {
+        allTodos.filter { $0.girlID == girl.id && !$0.isDone }
+            .sorted { ($0.fireDate ?? .distantFuture) < ($1.fireDate ?? .distantFuture) }
     }
 
     var body: some View {
@@ -25,22 +33,23 @@ struct GirlDetailView: View {
                 header(d)
                 overview(d)
                 alerts(d)
+                cycleSection(d)
+                todoSection
+                timelineSection(d)
+            }
+            Group {
                 basicInfo(d)
                 bodyInfo(d)
                 socialInfo(d)
                 metInfo(d)
-            }
-            Group {
                 haremInfo(d)
                 saidSection(d)
                 preferenceInfo(d)
-                intimacyInfo(d)
-                periodSection(d)
-                datesSection(d)
             }
             Group {
+                intimacyInfo(d)
+                datesSection(d)
                 giftSection(d)
-                memoSection(d)
                 encounterSection
                 photoSection
                 customInfo(d)
@@ -49,6 +58,7 @@ struct GirlDetailView: View {
                 }
             }
         }
+        .listSectionSpacing(.compact)
         .navigationTitle(girl.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -65,6 +75,9 @@ struct GirlDetailView: View {
         }
         .sheet(item: $sheet) { which in
             sheetContent(which)
+        }
+        .sheet(item: $editingTodo) { todo in
+            TodoEditView(todo: todo)
         }
         .confirmationDialog("删除「\(girl.name)」的档案？", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("删除档案，保留约会记录", role: .destructive) { delete(alsoEncounters: false) }
@@ -97,9 +110,13 @@ struct GirlDetailView: View {
                 Reminders.rescheduleDates(girls: allGirls)
             }
         case .period:
-            PeriodSheet { date in
-                girl.update { $0.periodStarts.append(date); $0.periodStarts.sort(by: >) }
+            PeriodEditSheet(entry: PeriodEntry(start: Calendar.current.startOfDay(for: Date()))) { entry in
+                withAnimation(.snappy) {
+                    girl.update { d in d.setPeriods(d.periodEntries + [entry]) }
+                }
             }
+        case .todo:
+            TodoEditView(todo: nil, presetGirl: girl)
         }
     }
 
@@ -114,31 +131,48 @@ struct GirlDetailView: View {
 
     private func header(_ d: GirlDetails) -> some View {
         Section {
-            VStack(spacing: 10) {
-                AvatarView(photoID: girl.avatarID, name: girl.name, size: 92, ring: girl.status.color)
-                HStack(spacing: 6) {
-                    if !girl.rank.isEmpty { Badge(text: girl.rank) }
-                    Badge(text: girl.status.title, color: girl.status.color)
-                }
-                let line = headerLine(d)
-                if !line.isEmpty {
-                    Text(line).font(.subheadline).foregroundStyle(.secondary)
+            VStack(spacing: 12) {
+                AvatarView(photoID: girl.avatarID, name: girl.name, size: 96, ring: girl.status.color)
+                    .shadow(color: girl.status.color.opacity(0.25), radius: 14, y: 6)
+                VStack(spacing: 6) {
+                    Text(girl.name)
+                        .font(.title2.weight(.bold))
+                        .fontDesign(.rounded)
+                    HStack(spacing: 6) {
+                        if !girl.rank.isEmpty { Badge(text: girl.rank) }
+                        Badge(text: girl.status.title, color: girl.status.color)
+                    }
+                    let line = headerLine(d)
+                    if !line.isEmpty {
+                        Text(line).font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
                 if !d.personality.isEmpty || !d.tags.isEmpty {
-                    ChipsView(items: d.personality + d.tags)
+                    ChipsView(items: d.personality + d.tags, color: girl.status.color)
+                        .frame(maxWidth: .infinity)
                 }
-                HStack(spacing: 10) {
-                    actionButton("记一次", "plus.circle.fill") { sheet = .encounter }
+                HStack(spacing: 0) {
+                    QuickAction(title: "记一次", symbol: "heart.fill") { sheet = .encounter }
                         .accessibilityIdentifier("logEncounter")
-                    actionButton("刚联系过", "message.fill") {
-                        girl.update { $0.lastContactDate = Date() }
+                    QuickAction(title: "联系过", symbol: "message.fill", tint: .teal) {
+                        withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
                     }
-                    actionButton("编辑", "pencil.circle.fill") { sheet = .edit }
+                    QuickAction(title: "待办", symbol: "checklist", tint: Palette.todo) { sheet = .todo }
+                    QuickAction(title: "备忘", symbol: "square.and.pencil", tint: Palette.memo) { sheet = .memo }
                 }
-                .padding(.top, 4)
+                .padding(.top, 2)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
+            .padding(.vertical, 10)
+            .listRowBackground(heroBackground)
+        }
+    }
+
+    private var heroBackground: some View {
+        ZStack {
+            Color(uiColor: .secondarySystemGroupedBackground)
+            LinearGradient(colors: [girl.status.color.opacity(0.16), girl.status.color.opacity(0.0)],
+                           startPoint: .top, endPoint: .bottom)
         }
     }
 
@@ -149,19 +183,6 @@ struct GirlDetailView: View {
         if !d.mbti.isEmpty { parts.append(d.mbti) }
         if !girl.city.isEmpty { parts.append(girl.city) }
         return parts.joined(separator: " · ")
-    }
-
-    private func actionButton(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol).font(.title3)
-                Text(title).font(.caption)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(.borderless)
     }
 
     private func overview(_ d: GirlDetails) -> some View {
@@ -208,11 +229,9 @@ struct GirlDetailView: View {
             let n = Reminders.daysUntilNext(item.date)
             if n <= 14 { items.append(n == 0 ? "今天是\(item.title)" : "\(n) 天后是\(item.title)") }
         }
-        if d.possiblyOnPeriod {
-            items.append("她可能正在经期")
-        } else if let next = d.nextPeriod {
-            let n = Fmt.days(from: Date(), to: next)
-            if (0...5).contains(n) { items.append(n == 0 ? "预计今天来例假" : "预计 \(n) 天后来例假") }
+        let cycle = d.cycle
+        if cycle.hasData, !cycle.isOngoing, let n = cycle.daysUntilNext, (0...3).contains(n) {
+            items.append(n == 0 ? "预计今天来例假" : "预计 \(n) 天后来例假")
         }
         if d.contactGoalDays > 0, girl.status.isCurrent {
             let last = girl.lastInteraction(details: d) ?? girl.createdAt
@@ -406,23 +425,83 @@ struct GirlDetailView: View {
         }
     }
 
-    private func periodSection(_ d: GirlDetails) -> some View {
-        Section {
-            if let last = d.periodStarts.max() {
-                InfoRow(label: "上次开始", value: Fmt.date(last))
-                InfoRow(label: "平均周期", value: "\(d.averageCycle) 天")
-                if let next = d.nextPeriod {
-                    InfoRow(label: "预计下次", value: "\(Fmt.shortDate(next))（\(Fmt.days(from: Date(), to: next)) 天后）")
-                }
+    private func cycleSection(_ d: GirlDetails) -> some View {
+        let info = d.cycle
+        return Section {
+            if info.hasData {
+                CycleCard(girl: girl, info: info)
                 NavigationLink {
-                    PeriodHistoryView(girl: girl)
+                    GirlCycleView(girl: girl)
                 } label: {
-                    LabeledContent("全部记录", value: "\(d.periodStarts.count) 次")
+                    Label("经期日历与记录", systemImage: "calendar")
+                }
+            } else {
+                Button {
+                    withAnimation(.snappy) { girl.update { $0.startPeriod(on: Date()) } }
+                } label: {
+                    Label("今天来例假了", systemImage: "drop.fill")
+                }
+                .tint(Palette.period)
+                Button {
+                    sheet = .period
+                } label: {
+                    Label("补记之前的经期", systemImage: "calendar.badge.plus")
                 }
             }
-            Button { sheet = .period } label: { Label("记录一次经期开始", systemImage: "drop") }
         } header: {
             Text("生理期")
+        } footer: {
+            if !info.hasData {
+                Text("记两三次之后就能预测下次经期和易孕期。")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var todoSection: some View {
+        let todos = herTodos
+        if !todos.isEmpty {
+            Section {
+                ForEach(todos) { todo in
+                    TodoRow(todo: todo) {
+                        TodoActions.toggle(todo, girls: allGirls, context: context)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { editingTodo = todo }
+                }
+            } header: {
+                HStack {
+                    Text("待办")
+                    Spacer()
+                    Button {
+                        sheet = .todo
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+
+    private func timelineSection(_ d: GirlDetails) -> some View {
+        let events = TimelineBuilder.events(for: girl, todos: allTodos)
+        let recent = Array(events.prefix(4))
+        return Section {
+            ForEach(Array(recent.enumerated()), id: \.element.id) { index, event in
+                TimelineRow(event: event, isFirst: index == 0, isLast: index == recent.count - 1)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            }
+            NavigationLink {
+                GirlTimelineView(girl: girl)
+            } label: {
+                Text("查看完整时间线（\(events.count)）")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+            }
+        } header: {
+            Text("时间线")
         }
     }
 
@@ -463,16 +542,6 @@ struct GirlDetailView: View {
                 Spacer()
                 if d.giftSpending > 0 { Text("合计 \(Fmt.money(d.giftSpending))") }
             }
-        }
-    }
-
-    private func memoSection(_ d: GirlDetails) -> some View {
-        Section("时间线备忘") {
-            ForEach(d.memos) { note in
-                NoteRow(note: note)
-            }
-            .onDelete { idx in girl.update { $0.memos.remove(atOffsets: idx) } }
-            Button { sheet = .memo } label: { Label("加一条备忘", systemImage: "square.and.pencil") }
         }
     }
 
@@ -527,7 +596,7 @@ struct StatCell: View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.headline)
-                .monospacedDigit()
+                .statNumber()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label).font(.caption2).foregroundStyle(.secondary)
@@ -627,56 +696,6 @@ struct ImportantDateSheet: View {
             }
         }
         .presentationDetents([.medium])
-    }
-}
-
-struct PeriodSheet: View {
-    let onSave: (Date) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var date = Date()
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                DatePicker("开始日期", selection: $date, in: ...Date(), displayedComponents: .date)
-                    .datePickerStyle(.graphical)
-            }
-            .navigationTitle("经期开始")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { onSave(Calendar.current.startOfDay(for: date)); dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.large])
-    }
-}
-
-struct PeriodHistoryView: View {
-    let girl: Girl
-
-    var body: some View {
-        let starts = girl.details.periodStarts.sorted(by: >)
-        List {
-            ForEach(Array(starts.enumerated()), id: \.offset) { index, date in
-                HStack {
-                    Text(Fmt.date(date))
-                    Spacer()
-                    if index + 1 < starts.count {
-                        let gap = Fmt.days(from: starts[index + 1], to: date)
-                        Text("间隔 \(gap) 天").foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .onDelete { idx in
-                let toRemove = Set(idx.map { starts[$0] })
-                girl.update { details in details.periodStarts.removeAll { toRemove.contains($0) } }
-            }
-        }
-        .navigationTitle("经期记录")
     }
 }
 

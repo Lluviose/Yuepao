@@ -6,8 +6,12 @@ struct StatsView: View {
     @Query private var girls: [Girl]
     @Query(sort: \Encounter.date, order: .reverse) private var encounters: [Encounter]
     @Query(sort: \HealthTest.date, order: .reverse) private var tests: [HealthTest]
+    @Query private var todos: [TodoItem]
+    @Environment(\.modelContext) private var context
 
     @State private var rankingMode: RankingMode = .count
+    @State private var showSettings = false
+    @State private var chartsVisible = false
 
     enum RankingMode: String, CaseIterable, Identifiable {
         case count, rounds, spending, rating
@@ -37,6 +41,23 @@ struct StatsView: View {
                 spendingSection(stats)
             }
             .navigationTitle("统计")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("设置")
+                    .accessibilityIdentifier("openSettings")
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .onAppear {
+                withAnimation(.smooth(duration: 0.9).delay(0.1)) { chartsVisible = true }
+            }
         }
     }
 
@@ -46,8 +67,14 @@ struct StatsView: View {
     private func upcomingSection(_ s: StatsData) -> some View {
         let items = s.upcoming
         let cold = s.coldGirls
-        if !items.isEmpty || !cold.isEmpty {
+        let dueTodos = s.upcomingTodos(todos)
+        if !items.isEmpty || !cold.isEmpty || !dueTodos.isEmpty {
             Section("近期提醒") {
+                ForEach(dueTodos) { todo in
+                    TodoRow(todo: todo, girlName: girls.first { $0.id == todo.girlID }?.name) {
+                        TodoActions.toggle(todo, girls: girls, context: context)
+                    }
+                }
                 ForEach(items) { item in
                     NavigationLink {
                         GirlDetailView(girl: item.girl)
@@ -99,7 +126,7 @@ struct StatsView: View {
             Chart(s.monthly) { item in
                 BarMark(
                     x: .value("月份", item.month, unit: .month),
-                    y: .value("次数", item.count)
+                    y: .value("次数", chartsVisible ? item.count : 0)
                 )
                 .foregroundStyle(Color.accentColor.gradient)
                 .cornerRadius(3)
@@ -128,7 +155,7 @@ struct StatsView: View {
             Chart(s.weekdays) { item in
                 BarMark(
                     x: .value("星期", item.label),
-                    y: .value("次数", item.count)
+                    y: .value("次数", chartsVisible ? item.count : 0)
                 )
                 .foregroundStyle(Color.pink.gradient)
                 .cornerRadius(3)
@@ -139,7 +166,7 @@ struct StatsView: View {
             Chart(s.dayParts) { item in
                 BarMark(
                     x: .value("时段", item.label),
-                    y: .value("次数", item.count)
+                    y: .value("次数", chartsVisible ? item.count : 0)
                 )
                 .foregroundStyle(Color.purple.gradient)
                 .cornerRadius(3)
@@ -474,12 +501,20 @@ struct StatsData {
                 let n = Reminders.daysUntilNext(item.date)
                 if n <= 30 { items.append(Upcoming(girl: g, text: "\(g.name) · \(item.title)", days: n)) }
             }
-            if let next = d.nextPeriod {
-                let n = Fmt.days(from: Date(), to: next)
-                if (0...5).contains(n) { items.append(Upcoming(girl: g, text: "\(g.name) 预计来例假", days: n)) }
+            let cycle = d.cycle
+            if cycle.hasData, !cycle.isOngoing, let n = cycle.daysUntilNext, (0...5).contains(n) {
+                items.append(Upcoming(girl: g, text: "\(g.name) 预计来例假", days: n))
             }
         }
         return items.sorted { $0.days < $1.days }
+    }
+
+    func upcomingTodos(_ todos: [TodoItem]) -> [TodoItem] {
+        todos.filter { t in
+            guard !t.isDone, let due = t.dueDate else { return false }
+            return t.isOverdue || Fmt.days(from: Date(), to: due) <= 3
+        }
+        .sorted { ($0.fireDate ?? .distantFuture) < ($1.fireDate ?? .distantFuture) }
     }
 
     var coldGirls: [(girl: Girl, days: Int)] {

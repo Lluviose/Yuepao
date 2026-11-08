@@ -16,6 +16,22 @@ struct BackupFile: Codable {
     var encounters: [EncounterRecord]
     var healthTests: [HealthTestRecord]
     var photos: [String: Data]
+    /// 0.2 起才有，旧备份里没有
+    var todos: [TodoRecord]?
+}
+
+struct TodoRecord: Codable {
+    var id: UUID
+    var createdAt: Date
+    var title: String
+    var notes: String
+    var dueDate: Date?
+    var hasTime: Bool
+    var remind: Bool
+    var isDone: Bool
+    var doneAt: Date?
+    var girlID: UUID?
+    var category: String
 }
 
 struct GirlRecord: Codable {
@@ -90,6 +106,7 @@ enum BackupService {
         let places = try context.fetch(FetchDescriptor<Place>())
         let encounters = try context.fetch(FetchDescriptor<Encounter>())
         let tests = try context.fetch(FetchDescriptor<HealthTest>())
+        let todos = try context.fetch(FetchDescriptor<TodoItem>())
 
         var photos: [String: Data] = [:]
         for id in PhotoStore.shared.allIDs() {
@@ -118,7 +135,12 @@ enum BackupService {
                 HealthTestRecord(id: $0.id, date: $0.date, items: $0.items, result: $0.result,
                                  note: $0.note, nextDate: $0.nextDate)
             },
-            photos: photos
+            photos: photos,
+            todos: todos.map {
+                TodoRecord(id: $0.id, createdAt: $0.createdAt, title: $0.title, notes: $0.notes, dueDate: $0.dueDate,
+                           hasTime: $0.hasTime, remind: $0.remind, isDone: $0.isDone, doneAt: $0.doneAt,
+                           girlID: $0.girlID, category: $0.category)
+            }
         )
 
         let json = try JSONEncoder().encode(file)
@@ -202,6 +224,21 @@ enum BackupService {
             t.nextDate = r.nextDate
         }
 
+        for r in file.todos ?? [] {
+            let t = TodoItem(title: r.title)
+            context.insert(t)
+            t.id = r.id
+            t.createdAt = r.createdAt
+            t.notes = r.notes
+            t.dueDate = r.dueDate
+            t.hasTime = r.hasTime
+            t.remind = r.remind
+            t.isDone = r.isDone
+            t.doneAt = r.doneAt
+            t.girlID = r.girlID
+            t.category = r.category
+        }
+
         try context.save()
         ConfigStore.shared.config = file.config
     }
@@ -212,6 +249,7 @@ enum BackupService {
         for g in try context.fetch(FetchDescriptor<Girl>()) { context.delete(g) }
         for p in try context.fetch(FetchDescriptor<Place>()) { context.delete(p) }
         for t in try context.fetch(FetchDescriptor<HealthTest>()) { context.delete(t) }
+        for t in try context.fetch(FetchDescriptor<TodoItem>()) { context.delete(t) }
         try context.save()
         PhotoStore.shared.deleteAll()
     }

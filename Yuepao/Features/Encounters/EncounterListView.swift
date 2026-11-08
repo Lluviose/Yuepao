@@ -46,8 +46,11 @@ struct EncounterListView: View {
                     } header: {
                         HStack {
                             Text(Fmt.month(group.month))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
                             Spacer()
                             Text("\(group.items.count) 次 · \(group.items.reduce(0) { $0 + $1.count }) 回合")
+                                .statNumber()
                         }
                     }
                 }
@@ -98,55 +101,84 @@ struct EncounterRow: View {
     var showPlace: Bool = true
 
     var body: some View {
-        HStack(spacing: 12) {
-            avatars
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 14) {
+            DateChip(date: encounter.date)
+            VStack(alignment: .leading, spacing: 4) {
                 if showGirls {
-                    Text(encounter.girlNames).font(.headline).lineLimit(1)
+                    HStack(spacing: 6) {
+                        stackedAvatars
+                        Text(encounter.girlNames)
+                            .font(.headline)
+                            .lineLimit(1)
+                    }
                 }
-                Text(Fmt.row(encounter.date))
-                    .font(showGirls ? .caption : .subheadline)
-                    .foregroundStyle(showGirls ? HierarchicalShapeStyle.secondary : HierarchicalShapeStyle.primary)
-                if showPlace, let place = encounter.place {
-                    Label(place.displayName, systemImage: place.type.symbol)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(encounter.date.formatted(.dateTime.hour().minute()))
+                        .monospacedDigit()
+                    if showPlace, let place = encounter.place {
+                        Text("·")
+                        Image(systemName: place.type.symbol)
+                        Text(place.displayName).lineLimit(1)
+                    }
+                    if encounter.overnight {
+                        Image(systemName: "moon.fill").foregroundStyle(.indigo)
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 5) {
                 HStack(spacing: 4) {
                     if encounter.stiRisk || encounter.pregnancyRisk {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
-                    Text("×\(encounter.count)").font(.subheadline.weight(.semibold)).monospacedDigit()
+                    Text("×\(encounter.count)")
+                        .font(.subheadline.weight(.semibold))
+                        .statNumber()
                 }
                 if encounter.rating > 0 {
                     StarDisplay(value: encounter.rating)
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
     }
 
     @ViewBuilder
-    private var avatars: some View {
-        if showGirls {
-            let girls = Array(encounter.girls.prefix(2))
-            ZStack(alignment: .bottomTrailing) {
-                if let first = girls.first {
-                    AvatarView(photoID: first.avatarID, name: first.name, size: 42)
-                } else {
-                    AvatarView(photoID: nil, name: "?", size: 42)
-                }
-                if girls.count > 1 {
-                    AvatarView(photoID: girls[1].avatarID, name: girls[1].name, size: 22)
-                        .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
-                        .offset(x: 4, y: 4)
+    private var stackedAvatars: some View {
+        let girls = Array(encounter.girls.prefix(3))
+        if !girls.isEmpty {
+            HStack(spacing: -6) {
+                ForEach(girls) { g in
+                    AvatarView(photoID: g.avatarID, name: g.name, size: 20)
+                        .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 1.5))
                 }
             }
         }
+    }
+}
+
+/// 记录行左边的日期块
+struct DateChip: View {
+    let date: Date
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("\(Calendar.current.component(.day, from: date))")
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(Calendar.current.isDateInToday(date) ? Color.white : Color.primary)
+            Text(date.formatted(Date.FormatStyle().weekday(.abbreviated).locale(Fmt.locale)))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Calendar.current.isDateInToday(date) ? Color.white.opacity(0.85) : Color.secondary)
+        }
+        .frame(width: 44, height: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Calendar.current.isDateInToday(date) ? Color.accentColor : Color.accentColor.opacity(0.1))
+        )
     }
 }
 

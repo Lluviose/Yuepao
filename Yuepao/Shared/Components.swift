@@ -13,6 +13,7 @@ struct AvatarView: View {
         content
             .frame(width: size, height: size)
             .clipShape(Circle())
+            .padding(ring == nil ? 0 : max(2, size / 22) + 1.5)
             .overlay {
                 if let ring {
                     Circle().stroke(ring, lineWidth: max(2, size / 22))
@@ -28,10 +29,10 @@ struct AvatarView: View {
                 .scaledToFill()
         } else {
             ZStack {
-                Circle().fill(Color.secondary.opacity(0.15))
+                Circle().fill(Palette.avatarGradient(for: name))
                 Text(String(name.prefix(1)))
-                    .font(.system(size: size * 0.42, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
             }
         }
     }

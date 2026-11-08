@@ -13,6 +13,8 @@ struct SettingsView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @AppStorage("discreetNotifications") private var discreetNotifications = true
     @AppStorage("riskReminders") private var riskReminders = true
+    @AppStorage("periodReminders") private var periodReminders = false
+    @Environment(\.dismiss) private var dismiss
 
     @State private var exportSheet = false
     @State private var exportDocument: BackupDocument?
@@ -36,6 +38,12 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
             .sheet(isPresented: $exportSheet) {
                 BackupPasswordSheet { password in
                     makeBackup(password: password)
@@ -135,11 +143,13 @@ struct SettingsView: View {
                 Toggle("隐藏通知内容", isOn: $discreetNotifications)
                     .onChange(of: discreetNotifications) { _, _ in Reminders.rescheduleDates(girls: girls) }
                 Toggle("有风险时提醒做检测", isOn: $riskReminders)
+                Toggle("经期提醒（预计前一天晚上）", isOn: $periodReminders)
+                    .onChange(of: periodReminders) { _, _ in Reminders.rescheduleDates(girls: girls) }
             }
         } header: {
             Text("提醒")
         } footer: {
-            Text("生日 / 纪念日前一天晚上和当天早上提醒。隐藏内容后，锁屏上只显示「你有一条待办事项」。")
+            Text("生日 / 纪念日前一天晚上和当天早上提醒；待办按设定的时间提醒。隐藏内容后，锁屏上只显示「你有一条待办事项」。")
         }
     }
 
@@ -196,7 +206,7 @@ struct SettingsView: View {
 
     private var restoreSummary: String {
         guard let file = pendingRestore else { return "" }
-        return "备份时间：\(Fmt.dateTime(file.exportedAt))\n包含 \(file.girls.count) 个档案、\(file.encounters.count) 条记录、\(file.places.count) 个地点、\(file.photos.count) 张照片。\n当前 App 里的数据会被全部替换。"
+        return "备份时间：\(Fmt.dateTime(file.exportedAt))\n包含 \(file.girls.count) 个档案、\(file.encounters.count) 条记录、\(file.todos?.count ?? 0) 条待办、\(file.places.count) 个地点、\(file.photos.count) 张照片。\n当前 App 里的数据会被全部替换。"
     }
 
     // MARK: Actions
@@ -247,6 +257,9 @@ struct SettingsView: View {
             try BackupService.restore(file, context: context)
             let all = (try? context.fetch(FetchDescriptor<Girl>())) ?? []
             Reminders.rescheduleDates(girls: all)
+            for todo in (try? context.fetch(FetchDescriptor<TodoItem>())) ?? [] {
+                Reminders.scheduleTodo(todo, girlName: all.first { $0.id == todo.girlID }?.name)
+            }
             message = "恢复完成"
         } catch {
             message = "恢复失败：\(error.localizedDescription)"
