@@ -162,7 +162,7 @@ struct GirlCycleView: View {
                 MonthCalendarView(month: $month, selection: $selection) { day in
                     var dec = DayDecoration()
                     switch info.kind(on: day) {
-                    case .period(let predicted): dec.band = predicted ? .predictedPeriod : .period
+                    case .period(let predicted): dec.band = predicted ? DayDecoration.Band.predictedPeriod : DayDecoration.Band.period
                     case .fertile: dec.band = .fertile
                     case .ovulation:
                         dec.band = .fertile

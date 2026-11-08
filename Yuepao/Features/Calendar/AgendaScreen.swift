@@ -73,7 +73,7 @@ struct AgendaModel {
 
         if focusGirl != nil, let info = cycles.first?.info {
             switch info.kind(on: key) {
-            case .period(let predicted): dec.band = predicted ? .predictedPeriod : .period
+            case .period(let predicted): dec.band = predicted ? DayDecoration.Band.predictedPeriod : DayDecoration.Band.period
             case .fertile: dec.band = .fertile
             case .ovulation:
                 dec.band = .fertile
