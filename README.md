@@ -4,6 +4,14 @@
 
 主屏幕上显示的名字是「手账」，图标是一个普通的笔记本。
 
+## 截图
+
+下面是用演示数据在模拟器里自动截的图，每次手动运行 CI 时可以选择更新。
+
+| 后宫 | 档案详情 | 地图 | 统计 |
+| --- | --- | --- | --- |
+| ![后宫](docs/screenshots/b0-tab.jpg) | ![档案](docs/screenshots/c1-detail.jpg) | ![地图](docs/screenshots/b2-tab.jpg) | ![统计](docs/screenshots/b3-tab.jpg) |
+
 ## 拿到 IPA
 
 每次往仓库推代码，GitHub Actions 都会自动编译一个**未签名**的 IPA：
@@ -15,6 +23,8 @@
 打一个 `v` 开头的 tag（比如 `v0.1.0`）时，IPA 还会额外发布到 **Releases** 页面，在手机上可以直接下载。
 
 也可以在 Actions 页面点 **Run workflow** 手动触发编译。
+
+每次编译还会在 iOS 模拟器里跑一遍自动化测试（启动、建档、记一次、逛遍所有页面），确保 App 能正常打开、不闪退。
 
 ## 不丢数据
 

@@ -61,7 +61,7 @@ final class GirlAnnotationView: MKAnnotationView {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         clusteringIdentifier = "girl"
         collisionMode = .circle
-        displayPriority = .defaultHigh
+        displayPriority = .required
         canShowCallout = false
     }
 
@@ -84,7 +84,7 @@ final class PlaceAnnotationView: MKAnnotationView {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         clusteringIdentifier = "place"
         collisionMode = .circle
-        displayPriority = .defaultHigh
+        displayPriority = .required
         canShowCallout = false
     }
 
@@ -255,14 +255,25 @@ struct ClusterMapView: UIViewRepresentable {
             if !didFit, !new.isEmpty {
                 didFit = true
                 DispatchQueue.main.async {
-                    map.showAnnotations(new, animated: false)
+                    Coordinator.fit(map, to: new, animated: false)
                 }
             }
         }
 
-        func fitAll(_ map: MKMapView) {
-            let all = map.annotations.filter { !($0 is MKUserLocation) }
-            if !all.isEmpty { map.showAnnotations(all, animated: true) }
+        /// 让所有标注都可见，并避开顶部筛选栏和底部标签栏
+        static func fit(_ map: MKMapView, to annotations: [MKAnnotation], animated: Bool) {
+            guard let first = annotations.first else { return }
+            var rect = MKMapRect.null
+            for a in annotations {
+                let p = MKMapPoint(a.coordinate)
+                rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 1, height: 1))
+            }
+            let minSide = 3000 * MKMapPointsPerMeterAtLatitude(first.coordinate.latitude)
+            if rect.size.width < minSide || rect.size.height < minSide {
+                rect = rect.insetBy(dx: -(max(minSide - rect.size.width, 0) / 2),
+                                    dy: -(max(minSide - rect.size.height, 0) / 2))
+            }
+            map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 60, left: 50, bottom: 150, right: 50), animated: animated)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -291,7 +302,7 @@ struct ClusterMapView: UIViewRepresentable {
                     let places = members.compactMap { ($0 as? PlaceAnnotation)?.item.id }
                     parent.onSelect(.group(girls: girls, places: places))
                 } else {
-                    mapView.showAnnotations(members, animated: true)
+                    Coordinator.fit(mapView, to: members, animated: true)
                 }
                 return
             }
