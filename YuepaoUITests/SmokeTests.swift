@@ -71,11 +71,13 @@ final class SmokeTests: XCTestCase {
         shot(app, "a5-encounter-edit")
         save.tap()
 
-        XCTAssertTrue(app.staticTexts["约会记录（1）"].waitForExistence(timeout: 5))
+        XCTAssertTrue(save.waitForNonExistence(timeout: 5))
+        sleep(1)
         shot(app, "a6-detail-after")
 
+        // 记录页里应该出现这条记录
         tapTab(app, "记录")
-        sleep(1)
+        XCTAssertTrue(app.staticTexts["测试"].firstMatch.waitForExistence(timeout: 5))
         shot(app, "a7-records")
     }
 
