@@ -86,6 +86,7 @@ struct EncounterEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }
+                        .accessibilityIdentifier("saveEncounter")
                 }
             }
             .alert("这次有风险", isPresented: $riskAlert) {

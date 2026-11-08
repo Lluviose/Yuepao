@@ -75,3 +75,52 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/Yuepao.ipa
+
+  ui-test:
+    # 在模拟器里跑一遍冒烟测试并截图，确认 App 能正常启动和使用
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          found = [(rt, d) for rt, ds in devices.items() if "iOS" in rt for d in ds if d["name"].startswith("iPhone")]
+          found.sort(key=lambda t: (t[0], "Pro" in t[1]["name"]))
+          print(found[-1][1]["udid"])
+          print(found[-1][0], found[-1][1]["name"], file=sys.stderr)
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Run UI tests
+        run: |
+          set -o pipefail
+          mkdir -p screenshots
+          TEST_RUNNER_SCREENSHOT_DIR="$PWD/screenshots" xcodebuild test \
+            -project Yuepao.xcodeproj \
+            -scheme Yuepao \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build-sim \
+            -quiet 2>&1 | tee test.log
+
+      - name: Show failures
+        if: failure()
+        run: grep -E "error|failed|Fatal|crash" test.log | head -80 || true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: screenshots/
+          retention-days: 14

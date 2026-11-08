@@ -7,6 +7,7 @@ struct YuepaoApp: App {
 
     init() {
         container = Persistence.makeContainer()
+        TestSupport.seedIfNeeded(container.mainContext)
     }
 
     var body: some Scene {

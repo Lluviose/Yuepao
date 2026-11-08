@@ -129,6 +129,7 @@ struct GirlDetailView: View {
                 }
                 HStack(spacing: 10) {
                     actionButton("记一次", "plus.circle.fill") { sheet = .encounter }
+                        .accessibilityIdentifier("logEncounter")
                     actionButton("刚联系过", "message.fill") {
                         girl.update { $0.lastContactDate = Date() }
                     }

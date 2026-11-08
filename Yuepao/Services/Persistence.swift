@@ -13,6 +13,11 @@ enum Persistence {
     }
 
     static func makeContainer() -> ModelContainer {
+        if TestSupport.isUITesting {
+            let memory = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+            // swiftlint:disable:next force_try
+            return try! ModelContainer(for: schema, configurations: [memory])
+        }
         let dir = storeDirectory
         try? FileManager.default.createDirectory(
             at: dir,

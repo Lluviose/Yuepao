@@ -87,6 +87,8 @@ struct GirlListView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("新建档案")
+                    .accessibilityIdentifier("addGirl")
                 }
             }
             .sheet(isPresented: $creating) {

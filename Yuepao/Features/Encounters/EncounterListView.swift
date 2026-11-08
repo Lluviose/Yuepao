@@ -73,6 +73,8 @@ struct EncounterListView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("记一次")
+                .accessibilityIdentifier("addEncounter")
             }
             .sheet(isPresented: $creating) {
                 EncounterEditView(encounter: nil, presetGirls: [])

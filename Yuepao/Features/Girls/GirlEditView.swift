@@ -94,6 +94,7 @@ struct GirlEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }
                         .disabled(draft.name.trimmed.isEmpty)
+                        .accessibilityIdentifier("saveGirl")
                 }
             }
             .onChange(of: avatarItem) { _, item in
@@ -130,6 +131,7 @@ struct GirlEditView: View {
                 }
             }
             TextField("代号 / 昵称（必填）", text: $draft.name)
+                .accessibilityIdentifier("girlName")
             TextField("真名（默认隐藏）", text: $draft.details.realName)
             OptionalDateRow(title: "生日", date: $draft.details.birthday)
             if let age = Fmt.age(draft.details.birthday) {

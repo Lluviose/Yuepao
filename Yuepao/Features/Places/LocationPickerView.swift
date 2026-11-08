@@ -14,6 +14,7 @@ enum LocationPermission {
     static let manager = CLLocationManager()
 
     static func requestIfNeeded() {
+        if TestSupport.isUITesting { return }
         if manager.authorizationStatus == .notDetermined {
             manager.requestWhenInUseAuthorization()
         }

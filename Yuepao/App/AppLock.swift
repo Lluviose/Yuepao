@@ -12,7 +12,10 @@ final class AppLock: ObservableObject {
     /// 只在启动和从后台回来时自动弹 Face ID，失败/取消后不再自动弹（避免死循环）
     private var shouldAutoPrompt = true
 
-    static var lockEnabled: Bool { UserDefaults.standard.object(forKey: "lockEnabled") as? Bool ?? true }
+    static var lockEnabled: Bool {
+        if TestSupport.isUITesting { return false }
+        return UserDefaults.standard.object(forKey: "lockEnabled") as? Bool ?? true
+    }
     static var lockDelay: TimeInterval { UserDefaults.standard.double(forKey: "lockDelay") }
 
     static var canAuthenticate: Bool {

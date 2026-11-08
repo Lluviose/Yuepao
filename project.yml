@@ -46,12 +46,31 @@ targets:
         NSFaceIDUsageDescription: 用于解锁应用，保护你的私密数据
         NSLocationWhenInUseUsageDescription: 用于在地图上显示你的位置、选择地点
 
+  YuepaoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: YuepaoUITests
+    dependencies:
+      - target: Yuepao
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.lluviose.yuepao.uitests
+        TEST_TARGET_NAME: Yuepao
+
 schemes:
   Yuepao:
     build:
       targets:
         Yuepao: all
+        YuepaoUITests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - YuepaoUITests
     archive:
       config: Release
