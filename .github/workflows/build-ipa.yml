@@ -8,6 +8,11 @@ on:
       - 'docs/**'
       - '**.md'
   workflow_dispatch:
+    inputs:
+      commit_screenshots:
+        description: '把模拟器截图提交到 docs/screenshots'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -80,6 +85,8 @@ jobs:
     # 在模拟器里跑一遍冒烟测试并截图，确认 App 能正常启动和使用
     runs-on: macos-26
     timeout-minutes: 40
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
 
@@ -120,16 +127,21 @@ jobs:
           xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json 2>/dev/null \
             | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({k: d.get(k) for k in ("result","passedTests","failedTests","testFailures")}, ensure_ascii=False, indent=1))' || true
 
-      - name: Dump screenshots to log
-        if: always()
+      - name: Commit screenshots
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.commit_screenshots
         run: |
-          mkdir -p small
+          mkdir -p docs/screenshots
+          rm -f docs/screenshots/*.jpg
           for f in screenshots/*.png; do
             [ -e "$f" ] || continue
             n=$(basename "$f" .png)
-            sips -Z 640 -s format jpeg -s formatOptions 45 "$f" --out "small/$n.jpg" >/dev/null
-            echo "SHOT $n $(base64 -i "small/$n.jpg" | tr -d '\n')"
+            sips -Z 900 -s format jpeg -s formatOptions 70 "$f" --out "docs/screenshots/$n.jpg" >/dev/null
           done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Update UI screenshots" || exit 0
+          git push
 
       - name: Upload screenshots
         if: always()
