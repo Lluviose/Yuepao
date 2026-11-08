@@ -21,26 +21,32 @@ struct GirlDetailView: View {
     var body: some View {
         let d = girl.details
         List {
-            header(d)
-            overview(d)
-            alerts(d)
-            basicInfo(d)
-            bodyInfo(d)
-            socialInfo(d)
-            metInfo(d)
-            haremInfo(d)
-            saidSection(d)
-            preferenceInfo(d)
-            intimacyInfo(d)
-            periodSection(d)
-            datesSection(d)
-            giftSection(d)
-            memoSection(d)
-            encounterSection
-            photoSection
-            customInfo(d)
-            if !d.notes.isEmpty {
-                Section("备注") { Text(d.notes).textSelection(.enabled) }
+            Group {
+                header(d)
+                overview(d)
+                alerts(d)
+                basicInfo(d)
+                bodyInfo(d)
+                socialInfo(d)
+                metInfo(d)
+            }
+            Group {
+                haremInfo(d)
+                saidSection(d)
+                preferenceInfo(d)
+                intimacyInfo(d)
+                periodSection(d)
+                datesSection(d)
+            }
+            Group {
+                giftSection(d)
+                memoSection(d)
+                encounterSection
+                photoSection
+                customInfo(d)
+                if !d.notes.isEmpty {
+                    Section("备注") { Text(d.notes).textSelection(.enabled) }
+                }
             }
         }
         .navigationTitle(girl.name)

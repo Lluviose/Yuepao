@@ -69,17 +69,21 @@ struct GirlEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                basicSection
-                bodySection
-                socialSection
-                contactSection
-                metSection
-                haremSection
-                connectionSection
-                preferenceSection
-                intimacySection
-                customSection
-                notesSection
+                Group {
+                    basicSection
+                    bodySection
+                    socialSection
+                    contactSection
+                    metSection
+                }
+                Group {
+                    haremSection
+                    connectionSection
+                    preferenceSection
+                    intimacySection
+                    customSection
+                    notesSection
+                }
             }
             .navigationTitle(girl == nil ? "新建档案" : "编辑档案")
             .navigationBarTitleDisplayMode(.inline)
