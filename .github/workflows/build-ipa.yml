@@ -111,11 +111,25 @@ jobs:
             -scheme Yuepao \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build-sim \
+            -resultBundlePath TestResults.xcresult \
             -quiet 2>&1 | tee test.log
 
-      - name: Show failures
-        if: failure()
-        run: grep -E "error|failed|Fatal|crash" test.log | head -80 || true
+      - name: Test summary
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json 2>/dev/null \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({k: d.get(k) for k in ("result","passedTests","failedTests","testFailures")}, ensure_ascii=False, indent=1))' || true
+
+      - name: Dump screenshots to log
+        if: always()
+        run: |
+          mkdir -p small
+          for f in screenshots/*.png; do
+            [ -e "$f" ] || continue
+            n=$(basename "$f" .png)
+            sips -Z 640 -s format jpeg -s formatOptions 45 "$f" --out "small/$n.jpg" >/dev/null
+            echo "SHOT $n $(base64 -i "small/$n.jpg" | tr -d '\n')"
+          done
 
       - name: Upload screenshots
         if: always()
