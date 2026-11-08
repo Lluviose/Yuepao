@@ -264,12 +264,6 @@ struct AgendaScreen: View {
                         eventRow(event)
                     }
                 }
-                HStack(spacing: 10) {
-                    addButton("记一次", "heart.fill") { creatingEncounter = true }
-                    addButton("加待办", "checklist") { creatingTodo = true }
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             } header: {
                 HStack {
                     Text(dayTitle(selection))
@@ -281,6 +275,15 @@ struct AgendaScreen: View {
                     }
                 }
                 .animation(.snappy, value: selection)
+            }
+
+            Section {
+                HStack(spacing: 10) {
+                    addButton("记一次", "heart.fill") { creatingEncounter = true }
+                    addButton("加待办", "checklist") { creatingTodo = true }
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             }
         }
         .listSectionSpacing(.compact)

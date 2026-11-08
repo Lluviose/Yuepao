@@ -58,7 +58,9 @@ struct TodoRow: View {
 
     private var meta: String {
         var parts: [String] = []
-        if showDate, let due = todo.dueDate {
+        if showDate, let due = todo.dueDate, todo.isDone {
+            parts.append(Fmt.shortDate(due))
+        } else if showDate, let due = todo.dueDate {
             parts.append(TodoFormat.due(due, hasTime: todo.hasTime))
         } else if let due = todo.dueDate, todo.hasTime {
             parts.append(due.formatted(.dateTime.hour().minute()))
