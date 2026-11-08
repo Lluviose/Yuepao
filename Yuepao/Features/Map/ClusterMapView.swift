@@ -95,6 +95,8 @@ final class PlaceAnnotationView: MKAnnotationView {
         clusteringIdentifier = "place"
         guard let a = annotation as? PlaceAnnotation else { return }
         image = MarkerRenderer.countBadge(count: a.item.count, suffix: "")
+        // 往右上角偏一点，和同一位置的头像错开，像个角标
+        centerOffset = MarkerRenderer.placeOffset
     }
 }
 
@@ -116,14 +118,18 @@ final class CountClusterView: MKAnnotationView {
         let members = cluster.memberAnnotations
         if members.first is GirlAnnotation {
             image = MarkerRenderer.girlCluster(count: members.count)
+            centerOffset = .zero
         } else {
             let total = members.compactMap { ($0 as? PlaceAnnotation)?.item.count }.reduce(0, +)
             image = MarkerRenderer.countBadge(count: total, suffix: "")
+            centerOffset = MarkerRenderer.placeOffset
         }
     }
 }
 
 enum MarkerRenderer {
+    static let placeOffset = CGPoint(x: 18, y: -18)
+
     static func avatar(image: UIImage?, name: String, border: UIColor) -> UIImage {
         let diameter: CGFloat = 44
         let labelHeight: CGFloat = 16
