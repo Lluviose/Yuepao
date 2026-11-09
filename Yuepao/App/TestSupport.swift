@@ -48,6 +48,10 @@ enum TestSupport {
                        NoteItem(date: daysAgo(40, hour: 21), text: "第一次去她家，养了一只橘猫")]
             d.importantDates = [ImportantDate(title: "在一起纪念日", date: daysAgo(170, hour: 12), remind: true)]
             d.likedPositions = ["女上", "后入"]
+            d.traits = ["敏感体质", "爱接吻", "喜欢被夸", "事后黏人"]
+            d.likedToys = ["跳蛋", "按摩油"]
+            d.aftercareNeeds = ["拥抱", "聊天"]
+            d.boundaries = "不接受拍照"
             d.gifts = [GiftItem(date: daysAgo(30, hour: 12), item: "香水", amount: 980, occasion: "日常")]
             d.contactGoalDays = 5
         }
@@ -55,6 +59,12 @@ enum TestSupport {
             d.birthday = cal.date(from: DateComponents(year: 1999, month: 3, day: 28))
             d.channel = "Soul"; d.metDate = daysAgo(90, hour: 20); d.ratingOverall = 7; d.intimacy = 60
             d.occupation = "护士"; d.contactGoalDays = 7
+            d.traits = ["恋痛", "M 倾向", "喜欢被支配", "叫声大"]
+            d.safeWord = "红灯"
+            d.likedPlay = ["束缚", "拍打"]
+            d.likedToys = ["眼罩", "绳子", "皮拍"]
+            d.aftercareNeeds = ["拥抱", "冷敷 / 涂药", "喝水"]
+            d.boundaries = "不留明显痕迹"
         }
         let lily = makeGirl("Lily", .flirting, "", "上海", 31.1955, 121.4370) { d in
             d.channel = "酒吧 / 夜店"; d.metDate = daysAgo(8, hour: 23); d.intimacy = 30
@@ -88,7 +98,10 @@ enum TestSupport {
             (yu, bjHotel, 95, 22, .condom), (mei, hotel, 120, 21, .condom)
         ]
         let positionSets: [[String]] = [["传教士", "后入"], ["女上", "传教士"], ["后入", "侧入"], ["女上"]]
-        let playSets: [[String]] = [[], ["制服"], [], ["玩具", "镜子"]]
+        let playSets: [[String]] = [["前戏", "口"], ["接吻"], [], ["共浴", "镜前"]]
+        let toySets: [[String]] = [["跳蛋"], [], ["按摩油"], [], ["眼罩"]]
+        let outfitSets: [[String]] = [["丝袜"], [], ["情趣内衣"], []]
+        let leads = ["我", "她", "", "轮流"]
         for (i, item) in plan.enumerated() {
             let e = Encounter(date: daysAgo(item.2, hour: item.3))
             context.insert(e)
@@ -102,6 +115,29 @@ enum TestSupport {
             d.play = playSets[i % playSets.count]
             d.herOrgasms = i % 2 == 0 ? 1 : -1
             d.chemistry = i == 4 ? 5 : 3
+            d.toys = toySets[i % toySets.count]
+            d.outfits = outfitSets[i % outfitSets.count]
+            d.intensity = [2, 3, 1, 2, 3][i % 5]
+            d.lead = leads[i % leads.count]
+            d.moods = i % 3 == 0 ? ["激情", "尽兴"] : (i % 3 == 1 ? ["温存"] : [])
+            d.feedback = i % 3 == 0 ? ["很满足"] : (i % 3 == 1 ? ["还想要"] : [])
+            d.aftercare = i % 2 == 0 ? ["拥抱", "清洁"] : []
+            d.activities = i % 4 == 0 ? ["吃饭", "喝酒"] : []
+            d.initiator = i % 4 == 0 ? "我" : ""
+            if i == 7 {
+                // 阿雪最近的一次：玩得重一点，事后照顾也记全
+                d.positions = ["后入", "趴姿"]
+                d.play = ["束缚", "拍打", "语言刺激"]
+                d.toys = ["眼罩", "绳子", "皮拍"]
+                d.outfits = ["情趣内衣", "吊带袜"]
+                d.intensity = 4
+                d.lead = "我"
+                d.herOrgasms = 2
+                d.moods = ["刺激", "尽兴"]
+                d.feedback = ["很满足", "有点疼"]
+                d.aftercare = ["拥抱", "冷敷 / 涂药", "喝水"]
+                d.notes = "她说下次想试试低温蜡烛，力度保持这次就好。"
+            }
             d.expenses = [ExpenseItem(category: "酒店", amount: item.1.type == .hotel ? 680 : 0),
                           ExpenseItem(category: "餐饮", amount: 200)]
                 .filter { $0.amount > 0 }

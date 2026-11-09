@@ -8,6 +8,7 @@ struct YuepaoApp: App {
     init() {
         Self.configureNavigationBar()
         container = Persistence.makeContainer()
+        DataMigrations.run(container.mainContext)
         TestSupport.seedIfNeeded(container.mainContext)
     }
 

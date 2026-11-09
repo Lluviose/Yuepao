@@ -12,19 +12,21 @@ struct CodexItem: Identifiable {
     var unlocked: Bool { count > 0 }
 }
 
-/// 图鉴：体位、玩法、星座，试过的点亮
+/// 图鉴：体位、玩法、道具、穿着、星座，试过的点亮
 struct CodexView: View {
     @Query(sort: \Encounter.date) private var encounters: [Encounter]
     @Query private var girls: [Girl]
     @ObservedObject private var config = ConfigStore.shared
 
     enum Tab: String, CaseIterable, Identifiable {
-        case positions, play, zodiac
+        case positions, play, toys, outfits, zodiac
         var id: String { rawValue }
         var title: String {
             switch self {
             case .positions: return "体位"
             case .play: return "玩法"
+            case .toys: return "道具"
+            case .outfits: return "穿着"
             case .zodiac: return "星座"
             }
         }
@@ -73,6 +75,8 @@ struct CodexView: View {
         switch tab {
         case .positions: return optionItems(.positions) { $0.positions }
         case .play: return optionItems(.play) { $0.play }
+        case .toys: return optionItems(.toys) { $0.toys }
+        case .outfits: return optionItems(.outfits) { $0.outfits }
         case .zodiac: return zodiacItems
         }
     }
@@ -125,7 +129,7 @@ struct CodexView: View {
         switch tab {
         case .zodiac:
             return left == 0 ? "十二星座已经集齐" : "还差 \(left) 个星座，给档案填上生日才会计入"
-        case .positions, .play:
+        case .positions, .play, .toys, .outfits:
             return left == 0 ? "全部解锁，可以在「设置 → 选项管理」里加新的" : "还有 \(left) 个没试过，下次约会试试？"
         }
     }

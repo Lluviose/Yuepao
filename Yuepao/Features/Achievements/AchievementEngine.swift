@@ -541,6 +541,18 @@ enum AchievementEngine {
                                    tier: .silver, symbol: "wand.and.stars", target: 3) { d in
             nth(d.newKeyDates { _, x in x.play }, 3)
         })
+        list.append(AchievementDef(id: "toys-3", title: "百宝箱", detail: "用过 3 种道具", category: .explore,
+                                   tier: .silver, symbol: "wand.and.rays", target: 3) { d in
+            nth(d.newKeyDates { _, x in x.toys }, 3)
+        })
+        list.append(AchievementDef(id: "toys-8", title: "收藏家", detail: "用过 8 种道具", category: .explore,
+                                   tier: .gold, symbol: "shippingbox", target: 8) { d in
+            nth(d.newKeyDates { _, x in x.toys }, 8)
+        })
+        list.append(AchievementDef(id: "outfits-3", title: "百变", detail: "解锁 3 种穿着", category: .explore,
+                                   tier: .bronze, symbol: "tshirt", target: 3) { d in
+            nth(d.newKeyDates { _, x in x.outfits }, 3)
+        })
         list.append(AchievementDef(id: "wish-1", title: "心想事成", detail: "实现第一个心愿", category: .explore,
                                    tier: .bronze, symbol: "star") { d in
             nth(d.wishes.filter(\.isDone).map { $0.doneAt ?? $0.createdAt }, 1)
@@ -578,6 +590,19 @@ enum AchievementEngine {
         list.append(AchievementDef(id: "perfect", title: "完美之夜", detail: "满意度和化学反应都是 5 星", category: .care,
                                    tier: .silver, symbol: "star.fill") { d in
             first(d.dates { e, x in e.rating == 5 && x.chemistry == 5 })
+        })
+        list.append(AchievementDef(id: "aftercare-10", title: "温柔善后", detail: "10 次记下事后照顾", category: .care,
+                                   tier: .silver, symbol: "hands.sparkles", target: 10) { d in
+            nth(d.dates { _, x in !x.aftercare.isEmpty }, 10)
+        })
+        list.append(AchievementDef(id: "feedback-10", title: "用心倾听", detail: "10 次记下她的反馈", category: .care,
+                                   tier: .silver, symbol: "ear", target: 10) { d in
+            nth(d.dates { _, x in !x.feedback.isEmpty }, 10)
+        })
+        list.append(AchievementDef(id: "safeword", title: "约法三章", detail: "和她约定安全词", category: .care,
+                                   tier: .bronze, symbol: "lock.shield") { d in
+            let any = d.girlDetails.values.contains { !$0.safeWord.trimmed.isEmpty }
+            return Measure(current: any ? 1 : 0, unlockedAt: nil)
         })
         list.append(AchievementDef(id: "gifts-5", title: "礼数周到", detail: "送出 5 份礼物", category: .care,
                                    tier: .silver, symbol: "gift.fill", target: 5) { d in

@@ -169,7 +169,7 @@ struct HubView: View {
             NavigationLink {
                 CodexView()
             } label: {
-                CollectionTile(symbol: "square.grid.3x3", title: "图鉴", value: codexSummary, caption: "体位 · 玩法 · 星座")
+                CollectionTile(symbol: "square.grid.3x3", title: "图鉴", value: codexSummary, caption: "体位 · 玩法 · 道具 · 星座")
             }
             .buttonStyle(PressableStyle())
             .accessibilityIdentifier("codexCard")

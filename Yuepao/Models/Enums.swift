@@ -64,6 +64,30 @@ enum Protection: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// 选择块上用的短名
+    var shortTitle: String {
+        switch self {
+        case .unrecorded: return "未记录"
+        case .condom: return "安全套"
+        case .pill: return "短效药"
+        case .both: return "套 + 药"
+        case .withdrawal: return "体外"
+        case .none: return "无措施"
+        }
+    }
+
+    /// 选择块上的图形，每种都不一样
+    var tileSymbol: String {
+        switch self {
+        case .unrecorded: return "questionmark.circle"
+        case .condom: return "checkmark.shield"
+        case .both: return "checkmark.shield.fill"
+        case .pill: return "pills"
+        case .withdrawal: return "arrow.uturn.backward"
+        case .none: return "exclamationmark.triangle"
+        }
+    }
+
     var color: Color {
         switch self {
         case .unrecorded: return .secondary
@@ -142,6 +166,12 @@ enum Choices {
     static let durations: [Int] = [0, 15, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720]
     static let contactGoals: [Int] = [0, 3, 5, 7, 10, 14, 21, 30, 60]
     static let initiators: [String] = ["", "我", "她", "互相"]
+    /// 谁主动约（单选，再点一次取消）
+    static let initiatorChoices: [String] = ["我", "她", "互相"]
+    /// 床上谁主导
+    static let leads: [String] = ["我", "她", "轮流"]
+    /// 记录表单里的时长快捷选项
+    static let quickDurations: [Int] = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720]
     static let testResults: [String] = ["阴性", "阳性", "待出结果", "其他"]
 
     static func durationTitle(_ minutes: Int) -> String {
@@ -149,5 +179,13 @@ enum Choices {
         if minutes < 60 { return "\(minutes) 分钟" }
         let h = Double(minutes) / 60
         return h == h.rounded() ? "\(Int(h)) 小时" : String(format: "%.1f 小时", h)
+    }
+
+    /// 数字和单位分开，给大数字 + 小单位的格子用：(1.5, 小时)
+    static func durationParts(_ minutes: Int) -> (value: String, unit: String) {
+        if minutes == 0 { return ("—", "") }
+        if minutes < 60 { return ("\(minutes)", "分钟") }
+        let h = Double(minutes) / 60
+        return (h == h.rounded() ? "\(Int(h))" : String(format: "%.1f", h), "小时")
     }
 }

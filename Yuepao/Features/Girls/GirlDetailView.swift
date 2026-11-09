@@ -71,6 +71,7 @@ struct GirlDetailView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("girlMenu")
             }
         }
         .sheet(item: $sheet) { which in
@@ -423,23 +424,49 @@ struct GirlDetailView: View {
 
     @ViewBuilder
     private func intimacyInfo(_ d: GirlDetails) -> some View {
-        if d.hasIntimacy {
-            Section("亲密偏好") {
-                if !d.likedPositions.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("体位").font(.subheadline).foregroundStyle(.secondary)
-                        ChipsView(items: d.likedPositions)
+        let habits = IntimacyHabits(encounters: girl.encounters)
+        if d.hasIntimacy || !habits.isEmpty {
+            Section {
+                if !d.traits.isEmpty {
+                    TagGroupView(title: "特质", symbol: "tag", items: d.traits, tint: Palette.gold)
+                        .padding(.vertical, 3)
+                }
+                if !d.safeWord.isEmpty {
+                    LabeledContent {
+                        Text(d.safeWord)
+                            .textSelection(.enabled)
+                    } label: {
+                        Label("安全词", systemImage: "lock.shield")
                     }
+                }
+                if !d.boundaries.isEmpty {
+                    TextBlock(label: "底线", text: d.boundaries)
+                        .foregroundStyle(Palette.period)
+                }
+                if !d.likedPositions.isEmpty {
+                    TagGroupView(title: "喜欢的体位", symbol: "square.grid.2x2", items: d.likedPositions)
+                        .padding(.vertical, 3)
                 }
                 if !d.likedPlay.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("玩法").font(.subheadline).foregroundStyle(.secondary)
-                        ChipsView(items: d.likedPlay)
-                    }
+                    TagGroupView(title: "喜欢的玩法", symbol: "wand.and.stars", items: d.likedPlay)
+                        .padding(.vertical, 3)
+                }
+                if !d.likedToys.isEmpty {
+                    TagGroupView(title: "喜欢的道具", symbol: "sparkles", items: d.likedToys)
+                        .padding(.vertical, 3)
+                }
+                if !d.aftercareNeeds.isEmpty {
+                    TagGroupView(title: "事后需要", symbol: "hands.sparkles", items: d.aftercareNeeds, tint: Palette.status)
+                        .padding(.vertical, 3)
+                }
+                if !habits.isEmpty {
+                    HabitsView(habits: habits)
+                        .padding(.vertical, 3)
                 }
                 if !d.sensitiveSpots.isEmpty { TextBlock(label: "敏感点", text: d.sensitiveSpots) }
-                if !d.boundaries.isEmpty { TextBlock(label: "边界", text: d.boundaries) }
                 if !d.contraception.isEmpty { TextBlock(label: "避孕约定", text: d.contraception) }
+            } header: {
+                Text("亲密档案")
             }
         }
     }
@@ -821,3 +848,90 @@ struct StatusHistoryView: View {
         .navigationTitle("状态变化")
     }
 }
+
+// MARK: - 亲密档案：从记录里统计的习惯
+
+/// 和她的记录里最常出现的体位、玩法、道具
+struct IntimacyHabits {
+    struct Entry: Identifiable {
+        let name: String
+        let count: Int
+        var id: String { name }
+    }
+
+    let positions: [Entry]
+    let play: [Entry]
+    let toys: [Entry]
+
+    init(encounters: [Encounter]) {
+        var positionCount: [String: Int] = [:]
+        var playCount: [String: Int] = [:]
+        var toyCount: [String: Int] = [:]
+        for e in encounters {
+            let d = e.details
+            for v in Set(d.positions) where !v.isEmpty { positionCount[v, default: 0] += 1 }
+            for v in Set(d.play) where !v.isEmpty { playCount[v, default: 0] += 1 }
+            for v in Set(d.toys) where !v.isEmpty { toyCount[v, default: 0] += 1 }
+        }
+        func top(_ counts: [String: Int]) -> [Entry] {
+            counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                .prefix(4)
+                .map { Entry(name: $0.key, count: $0.value) }
+        }
+        positions = top(positionCount)
+        play = top(playCount)
+        toys = top(toyCount)
+    }
+
+    var isEmpty: Bool { positions.isEmpty && play.isEmpty && toys.isEmpty }
+}
+
+struct HabitsView: View {
+    let habits: IntimacyHabits
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "chart.bar")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                Text("记录里最常")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            row("体位", habits.positions)
+            row("玩法", habits.play)
+            row("道具", habits.toys)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func row(_ title: String, _ entries: [IntimacyHabits.Entry]) -> some View {
+        if !entries.isEmpty {
+            HStack(alignment: .top, spacing: 10) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 30, alignment: .leading)
+                    .padding(.top, 5)
+                FlowLayout(spacing: 6) {
+                    ForEach(entries) { entry in
+                        HStack(spacing: 5) {
+                            Text(entry.name)
+                            Text("\(entry.count)")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .font(.footnote)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                    }
+                }
+            }
+        }
+    }
+}
+

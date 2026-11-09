@@ -145,6 +145,12 @@ final class SmokeTests: XCTestCase {
             firstRecord.tap()
             sleep(2)
             shot(app, "e1-record-detail")
+            app.swipeUp()
+            sleep(1)
+            shot(app, "e1b-record-detail-more")
+            app.swipeUp()
+            sleep(1)
+            shot(app, "e1c-record-detail-end")
             app.navigationBars.buttons.element(boundBy: 0).tap()
             sleep(1)
         }
@@ -154,6 +160,48 @@ final class SmokeTests: XCTestCase {
             quickPick.tap()
             sleep(1)
             shot(app, "e2-record-form")
+            // 她的特质：原地点开
+            let traits = app.buttons["traits-小美"].firstMatch
+            if traits.waitForExistence(timeout: 3) {
+                traits.tap()
+                sleep(1)
+                shot(app, "e2b-record-traits")
+                traits.tap()
+                sleep(1)
+            }
+            // 过程：强度、她高潮
+            let intensity = app.buttons["intensity-3"].firstMatch
+            if scrollTo(intensity, in: app) {
+                intensity.tap()
+                let plus = app.buttons["orgasms-plus"].firstMatch
+                if plus.exists && plus.isHittable { plus.tap() }
+                sleep(1)
+                shot(app, "e2c-record-process")
+            }
+            // 道具：点开选两个
+            let toys = app.buttons["tags-toys"].firstMatch
+            if scrollTo(toys, in: app) {
+                toys.tap()
+                sleep(1)
+                app.swipeUp()
+                sleep(1)
+                for name in ["跳蛋", "眼罩"] {
+                    let chip = app.buttons[name].firstMatch
+                    if chip.exists && chip.isHittable { chip.tap() }
+                }
+                sleep(1)
+                shot(app, "e2d-record-toys")
+            }
+            // 安全和感受
+            let feedback = app.buttons["tags-feedback"].firstMatch
+            if scrollTo(feedback, in: app) {
+                let condom = app.buttons["protection-condom"].firstMatch
+                if condom.exists && condom.isHittable { condom.tap() }
+                let star = app.buttons["rating-4"].firstMatch
+                if star.exists && star.isHittable { star.tap() }
+                sleep(1)
+                shot(app, "e2e-record-feeling")
+            }
         }
         app.buttons["取消"].firstMatch.tap()
         let discard = app.buttons["放弃修改"].firstMatch
@@ -202,7 +250,10 @@ final class SmokeTests: XCTestCase {
             shot(app, "i3-codex")
             let codexSegments = app.segmentedControls.firstMatch
             if codexSegments.waitForExistence(timeout: 3) {
-                codexSegments.buttons.element(boundBy: 2).tap()
+                codexSegments.buttons["道具"].tap()
+                sleep(1)
+                shot(app, "i3c-toys")
+                codexSegments.buttons["星座"].tap()
                 sleep(1)
                 shot(app, "i3b-zodiac")
             }
@@ -343,6 +394,38 @@ final class SmokeTests: XCTestCase {
         }
     }
 
+    /// 档案里的亲密档案：特质（恋痛等）、安全词、底线，以及编辑页里的标签选择
+    func testIntimacyProfile() {
+        let app = makeApp(seed: true)
+        app.launch()
+        tapTab(app, "后宫")
+        let xue = app.staticTexts["阿雪"].firstMatch
+        XCTAssertTrue(xue.waitForExistence(timeout: 5))
+        xue.tap()
+        sleep(2)
+        let header = app.staticTexts["亲密档案"].firstMatch
+        if scrollTo(header, in: app, maxSwipes: 10) {
+            app.swipeUp()
+            sleep(1)
+            shot(app, "c7-intimacy")
+        }
+        let menu = app.buttons["girlMenu"].firstMatch
+        if menu.waitForExistence(timeout: 3) {
+            menu.tap()
+            let edit = app.buttons["编辑档案"].firstMatch
+            if edit.waitForExistence(timeout: 3) {
+                edit.tap()
+                sleep(2)
+                let traits = app.buttons["tags-traits"].firstMatch
+                if scrollTo(traits, in: app, maxSwipes: 14) {
+                    traits.tap()
+                    sleep(1)
+                    shot(app, "c8-intimacy-edit")
+                }
+            }
+        }
+    }
+
     /// 万一弹出了详情之类的页面，往下拖关掉，回到地图
     private func dismissSheetIfNeeded(_ app: XCUIApplication) {
         let bar = app.navigationBars.firstMatch
@@ -456,6 +539,22 @@ final class SmokeTests: XCTestCase {
             mei.tap()
             sleep(2)
             shot(app, "f3-dark-detail")
+        }
+        tapTab(app, "记录")
+        let record = app.staticTexts["阿雪"].firstMatch
+        if record.waitForExistence(timeout: 5) {
+            record.tap()
+            sleep(2)
+            shot(app, "f6-dark-record")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+        app.buttons["addEncounter"].firstMatch.tap()
+        let pick = app.buttons["阿雪"].firstMatch
+        if pick.waitForExistence(timeout: 5) {
+            pick.tap()
+            sleep(1)
+            shot(app, "f7-dark-form")
         }
     }
 

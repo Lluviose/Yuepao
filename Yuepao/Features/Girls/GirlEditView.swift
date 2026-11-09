@@ -343,13 +343,29 @@ struct GirlEditView: View {
     }
 
     private var intimacySection: some View {
-        Section("亲密偏好") {
-            OptionMultiPicker(title: "喜欢的体位", key: .positions, selection: $draft.details.likedPositions)
-            OptionMultiPicker(title: "喜欢的玩法", key: .play, selection: $draft.details.likedPlay)
+        Section {
+            TagDisclosure(title: "特质 / 性癖", symbol: "tag", key: .traits,
+                          selection: $draft.details.traits, tint: Palette.gold)
+            TagDisclosure(title: "喜欢的体位", symbol: "square.grid.2x2", key: .positions,
+                          selection: $draft.details.likedPositions)
+            TagDisclosure(title: "喜欢的玩法", symbol: "wand.and.stars", key: .play,
+                          selection: $draft.details.likedPlay)
+            TagDisclosure(title: "喜欢的道具", symbol: "sparkles", key: .toys,
+                          selection: $draft.details.likedToys)
+            TagDisclosure(title: "事后需要", symbol: "hands.sparkles", key: .aftercare,
+                          selection: $draft.details.aftercareNeeds, tint: Palette.status)
+            LabeledContent("安全词") {
+                TextField("约定好叫停的词", text: $draft.details.safeWord)
+                    .multilineTextAlignment(.trailing)
+            }
+            TextField("底线 / 明确不接受的", text: $draft.details.boundaries, axis: .vertical)
             TextField("敏感点", text: $draft.details.sensitiveSpots, axis: .vertical)
-            TextField("边界 / 明确不接受的", text: $draft.details.boundaries, axis: .vertical)
             TextField("避孕约定", text: $draft.details.contraception, axis: .vertical)
             Stepper("经期一般持续 \(draft.details.periodLength) 天", value: $draft.details.periodLength, in: 2...10)
+        } header: {
+            Text("亲密偏好")
+        } footer: {
+            Text("特质也能在「记一次」里顺手勾选。玩得重一点之前先约好安全词，听到就停。")
         }
     }
 

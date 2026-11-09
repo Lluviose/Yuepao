@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 
+/// 记一次 / 编辑记录：一页卡片，常用的直接点选，长列表折叠成一行、点开原地多选
 struct EncounterEditView: View {
     let encounter: Encounter?
 
@@ -20,8 +21,10 @@ struct EncounterEditView: View {
     @State private var details: EncounterDetails
     @State private var girls: [Girl]
     @State private var place: Place?
+    /// 她的特质：在这里勾选，保存时写回她的档案
+    @State private var traits: [UUID: [String]]
+    @State private var originalTraits: [UUID: [String]]
     @State private var riskAlert = false
-    @State private var showMore: Bool
     @State private var confirmDiscard = false
 
     private let originalPhotos: Set<String>
@@ -39,15 +42,27 @@ struct EncounterEditView: View {
         var details: EncounterDetails
         var girlIDs: [UUID]
         var placeID: UUID?
+        var traitChanges: [UUID: [String]]
     }
 
     private var snapshot: Snapshot {
         Snapshot(date: date, durationMinutes: durationMinutes, overnight: overnight, count: count,
                  protection: protection, condomBroke: condomBroke, rating: rating, details: details,
-                 girlIDs: girls.map(\.id), placeID: place?.id)
+                 girlIDs: girls.map(\.id), placeID: place?.id, traitChanges: traitChanges)
     }
 
     private var isDirty: Bool { snapshot != initialSnapshot }
+
+    /// 只算选中的人里真的改过的
+    private var traitChanges: [UUID: [String]] {
+        var result: [UUID: [String]] = [:]
+        for g in girls {
+            if let edited = traits[g.id], edited != (originalTraits[g.id] ?? []) {
+                result[g.id] = edited
+            }
+        }
+        return result
+    }
 
     init(encounter: Encounter?, presetGirls: [Girl], presetDate: Date? = nil, presetPlace: Place? = nil) {
         self.encounter = encounter
@@ -63,7 +78,9 @@ struct EncounterEditView: View {
         let initialPlace = encounter?.place ?? presetPlace
         _girls = State(initialValue: initialGirls)
         _place = State(initialValue: initialPlace)
-        _showMore = State(initialValue: encounter != nil)
+        let storedTraits = Dictionary(initialGirls.map { ($0.id, $0.details.traits) }, uniquingKeysWith: { a, _ in a })
+        _traits = State(initialValue: storedTraits)
+        _originalTraits = State(initialValue: storedTraits)
         originalPhotos = Set(d.photoIDs)
         let initialDate = encounter?.date ?? Self.defaultDate(for: presetDate)
         _date = State(initialValue: initialDate)
@@ -71,7 +88,7 @@ struct EncounterEditView: View {
             date: initialDate, durationMinutes: encounter?.durationMinutes ?? 0, overnight: encounter?.overnight ?? false,
             count: encounter?.count ?? 1, protection: encounter?.protection ?? .unrecorded,
             condomBroke: encounter?.condomBroke ?? false, rating: encounter?.rating ?? 0, details: d,
-            girlIDs: initialGirls.map(\.id), placeID: initialPlace?.id)
+            girlIDs: initialGirls.map(\.id), placeID: initialPlace?.id, traitChanges: [:])
     }
 
     /// 从日历选了某天时：今天用现在的时间，其他日子默认晚上 9 点
@@ -114,26 +131,25 @@ struct EncounterEditView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                whoSection
-                whenSection
-                processSection
-                safetySection
-                if showMore {
-                    detailSection
-                    costSection
-                    feelingSection
-                    noteSection
-                } else {
-                    Section {
-                        Button {
-                            withAnimation { showMore = true }
-                        } label: {
-                            Label("填写更多（玩法、花费、评价、照片…）", systemImage: "chevron.down")
-                        }
-                    }
+            ScrollView {
+                VStack(spacing: 14) {
+                    whoCard
+                    placeCard
+                    timeCard
+                    processCard
+                    playCard
+                    safetyCard
+                    feelingCard
+                    dateCard
+                    costCard
+                    noteCard
+                    photoCard
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 36)
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .formKeyboardHandling()
             .navigationTitle(encounter == nil ? "记一次" : "编辑记录")
             .navigationBarTitleDisplayMode(.inline)
@@ -143,6 +159,7 @@ struct EncounterEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }
+                        .fontWeight(.semibold)
                         .accessibilityIdentifier("saveEncounter")
                 }
             }
@@ -155,6 +172,7 @@ struct EncounterEditView: View {
                 Button("放弃修改", role: .destructive) { discard() }
                 Button("继续编辑", role: .cancel) {}
             }
+            .onChange(of: girls.map(\.id)) { _, _ in seedTraits() }
         }
         .interactiveDismissDisabled(isDirty)
     }
@@ -171,24 +189,18 @@ struct EncounterEditView: View {
         return lines.joined(separator: "\n")
     }
 
-    // MARK: Sections
+    // MARK: 对象
 
-    /// 最近互动过的人，放在最前面方便一点即选
+    /// 最近见过的人放在最前面，方便一点即选
     private var quickGirls: [Girl] {
         let current = allGirls.filter { $0.status.isCurrent }
-        let sorted = current.sorted { ($0.lastInteraction() ?? $0.createdAt) > ($1.lastInteraction() ?? $1.createdAt) }
-        var list = Array(sorted.prefix(12))
+        let recency = Dictionary(current.map { ($0.id, $0.lastEncounterDate ?? $0.createdAt) },
+                                 uniquingKeysWith: { a, _ in a })
+        var list = Array(current.sorted {
+            (recency[$0.id] ?? .distantPast) > (recency[$1.id] ?? .distantPast)
+        }.prefix(12))
         for g in girls where !list.contains(where: { $0.id == g.id }) {
             list.insert(g, at: 0)
-        }
-        return list
-    }
-
-    private var quickPlaces: [Place] {
-        let sorted = allPlaces.sorted { ($0.lastUsed ?? $0.createdAt) > ($1.lastUsed ?? $1.createdAt) }
-        var list = Array(sorted.prefix(8))
-        if let place, !list.contains(where: { $0.id == place.id }) {
-            list.insert(place, at: 0)
         }
         return list
     }
@@ -203,72 +215,69 @@ struct EncounterEditView: View {
         }
     }
 
-    private var whoSection: some View {
-        Section {
-            if !quickGirls.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        ForEach(quickGirls) { g in
-                            QuickPickAvatar(girl: g, selected: girls.contains { $0.id == g.id }) {
-                                toggleGirl(g)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            }
+    /// 新选进来的人：把她档案里的特质带进来
+    private func seedTraits() {
+        for g in girls where traits[g.id] == nil {
+            let stored = g.details.traits
+            traits[g.id] = stored
+            originalTraits[g.id] = stored
+        }
+    }
+
+    private func traitBinding(_ girl: Girl) -> Binding<[String]> {
+        Binding(
+            get: { traits[girl.id] ?? [] },
+            set: { traits[girl.id] = $0 }
+        )
+    }
+
+    private var whoCard: some View {
+        RecordCard("对象", trailing: {
             NavigationLink {
                 GirlMultiSelectView(selection: $girls)
             } label: {
-                LabeledContent("对象") {
-                    Text(girls.isEmpty ? "未选择" : girls.map(\.name).joined(separator: "、"))
-                        .foregroundStyle(girls.isEmpty ? HierarchicalShapeStyle.tertiary : HierarchicalShapeStyle.secondary)
-                        .lineLimit(1)
-                        .contentTransition(.opacity)
-                }
+                CardLinkLabel(text: girls.isEmpty ? "全部" : "已选 \(girls.count) 人")
             }
-            if !quickPlaces.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(quickPlaces) { p in
-                            let selected = place?.id == p.id
-                            Button {
-                                withAnimation(.snappy(duration: 0.25)) { place = selected ? nil : p }
-                            } label: {
-                                Label(p.displayName, systemImage: p.type.symbol)
-                                    .font(.footnote.weight(.medium))
-                                    .lineLimit(1)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 7)
-                                    .foregroundStyle(selected ? Color.white : Color.primary)
-                                    .background(selected ? Color.accentColor : Color.secondary.opacity(0.12), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
+            .accessibilityIdentifier("pickGirls")
+        }) {
+            let quick = quickGirls
+            if quick.isEmpty {
+                NavigationLink {
+                    GirlMultiSelectView(selection: $girls)
+                } label: {
+                    placeholderRow("选择对象，或新建一份档案", symbol: "person.crop.circle.badge.plus")
+                }
+                .buttonStyle(.plain)
+            } else {
+                ScrollChips(spacing: 14) {
+                    ForEach(quick) { g in
+                        QuickPickAvatar(girl: g, selected: girls.contains { $0.id == g.id }) {
+                            toggleGirl(g)
                         }
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                .sensoryFeedback(.selection, trigger: place?.id)
             }
-            NavigationLink {
-                PlaceSelectView(selection: $place)
-            } label: {
-                LabeledContent("地点") {
-                    Text(place?.displayName ?? "未选择")
-                        .foregroundStyle(place == nil ? HierarchicalShapeStyle.tertiary : HierarchicalShapeStyle.secondary)
-                        .lineLimit(1)
-                }
-            }
-        } header: {
-            Text("对象和地点")
-        } footer: {
             let hints = cycleHints
             if !hints.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(hints, id: \.text) { hint in
                         Label(hint.text, systemImage: "drop.fill")
+                            .font(.footnote)
                             .foregroundStyle(hint.color)
+                    }
+                }
+                .transition(.opacity)
+            }
+            if !girls.isEmpty {
+                VStack(spacing: 0) {
+                    Divider().padding(.bottom, 12)
+                    ForEach(Array(girls.enumerated()), id: \.element.id) { index, g in
+                        if index > 0 { RowDivider() }
+                        TagDisclosure(title: girls.count == 1 ? "她的特质" : "\(g.name)的特质",
+                                      symbol: "tag", key: .traits, selection: traitBinding(g),
+                                      tint: Palette.gold,
+                                      note: "保存后同步到「\(g.name)」的档案",
+                                      identifier: "traits-\(g.name)")
                     }
                 }
                 .transition(.opacity)
@@ -276,116 +285,318 @@ struct EncounterEditView: View {
         }
     }
 
-    private var whenSection: some View {
-        Section("时间") {
-            DatePicker("开始时间", selection: $date)
-            Picker("时长", selection: $durationMinutes) {
-                ForEach(Choices.durations, id: \.self) { m in
-                    Text(Choices.durationTitle(m)).tag(m)
+    private func placeholderRow(_ text: String, symbol: String) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: symbol, color: .accentColor, size: 32)
+            Text(text)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+    }
+
+    // MARK: 地点
+
+    private var quickPlaces: [Place] {
+        let sorted = allPlaces.sorted { ($0.lastUsed ?? $0.createdAt) > ($1.lastUsed ?? $1.createdAt) }
+        var list = Array(sorted.prefix(8))
+        if let place, !list.contains(where: { $0.id == place.id }) {
+            list.insert(place, at: 0)
+        }
+        return list
+    }
+
+    private var placeCard: some View {
+        RecordCard("地点", trailing: {
+            NavigationLink {
+                PlaceSelectView(selection: $place)
+            } label: {
+                CardLinkLabel(text: "全部")
+            }
+            .accessibilityIdentifier("pickPlace")
+        }) {
+            let quick = quickPlaces
+            if quick.isEmpty {
+                NavigationLink {
+                    PlaceSelectView(selection: $place)
+                } label: {
+                    placeholderRow("选择或新建地点", symbol: "mappin.and.ellipse")
+                }
+                .buttonStyle(.plain)
+            } else {
+                ScrollChips {
+                    ForEach(quick) { p in
+                        ChoiceChip(title: p.displayName, symbol: p.type.symbol, selected: place?.id == p.id) {
+                            place = place?.id == p.id ? nil : p
+                        }
+                    }
                 }
             }
-            Toggle("过夜", isOn: $overnight)
+            if let place {
+                let line = [place.city, place.district, place.address].map(\.trimmed).filter { !$0.isEmpty }
+                if !line.isEmpty {
+                    Label(line.joined(separator: " · "), systemImage: "mappin")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .transition(.opacity)
+                }
+            }
         }
     }
 
-    private var processSection: some View {
-        Section("过程") {
-            Stepper(value: $count, in: 0...20) {
-                LabeledContent("回合数", value: "\(count)")
+    // MARK: 时间
+
+    private var timeCard: some View {
+        RecordCard("时间") {
+            HStack {
+                Text("开始")
+                Spacer(minLength: 8)
+                DatePicker("开始时间", selection: $date)
+                    .labelsHidden()
             }
-            Picker("她高潮", selection: $details.herOrgasms) {
-                Text("未记录").tag(-1)
-                ForEach(Array(0...6), id: \.self) { n in
-                    Text(n == 6 ? "6 次以上" : "\(n) 次").tag(n)
+            VStack(alignment: .leading, spacing: 9) {
+                FieldLabel(title: "时长", value: durationMinutes > 0 ? Choices.durationTitle(durationMinutes) : nil)
+                ScrollViewReader { proxy in
+                    ScrollChips {
+                        ForEach(Choices.quickDurations, id: \.self) { m in
+                            ChoiceChip(title: Choices.durationTitle(m), selected: durationMinutes == m) {
+                                durationMinutes = durationMinutes == m ? 0 : m
+                            }
+                            .id(m)
+                        }
+                    }
+                    .onAppear {
+                        if Choices.quickDurations.contains(durationMinutes) {
+                            proxy.scrollTo(durationMinutes, anchor: .center)
+                        }
+                    }
                 }
+            }
+            Toggle(isOn: $overnight) {
+                Label("过夜", systemImage: "moon")
+            }
+            .tint(.accentColor)
+        }
+    }
+
+    // MARK: 过程
+
+    private var orgasmText: String {
+        switch details.herOrgasms {
+        case ..<0: return "—"
+        case 6...: return "6+"
+        default: return "\(details.herOrgasms)"
+        }
+    }
+
+    private var processCard: some View {
+        RecordCard("过程") {
+            HStack(spacing: 10) {
+                CounterTile(title: "回合", value: "\(count)",
+                            canDecrement: count > 0, canIncrement: count < 20, identifier: "rounds",
+                            onDecrement: { count = max(count - 1, 0) },
+                            onIncrement: { count = min(count + 1, 20) })
+                CounterTile(title: "她高潮", value: orgasmText,
+                            caption: details.herOrgasms < 0 ? "未记录" : (details.herOrgasms == 0 ? "没有" : "次"),
+                            canDecrement: details.herOrgasms >= 0, canIncrement: details.herOrgasms < 6,
+                            identifier: "orgasms",
+                            onDecrement: { details.herOrgasms = max(details.herOrgasms - 1, -1) },
+                            onIncrement: {
+                                details.herOrgasms = details.herOrgasms < 0 ? 1 : min(details.herOrgasms + 1, 6)
+                            })
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                FieldLabel(title: "强度", value: Intensity.title(details.intensity))
+                IntensityPicker(value: $details.intensity)
+            }
+            .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 10) {
+                FieldLabel(title: "谁主导")
+                PillChoice(options: Choices.leads, selection: $details.lead, identifier: "lead")
             }
         }
     }
 
-    private var safetySection: some View {
-        Section {
-            Picker("安全措施", selection: $protection) {
-                ForEach(Protection.allCases) { p in
-                    Text(p.title).tag(p)
-                }
+    // MARK: 玩法与道具
+
+    private var playCard: some View {
+        RecordCard("玩法与道具") {
+            VStack(spacing: 0) {
+                TagDisclosure(title: "体位", symbol: "square.grid.2x2", key: .positions, selection: $details.positions)
+                RowDivider()
+                TagDisclosure(title: "玩法", symbol: "wand.and.stars", key: .play, selection: $details.play)
+                RowDivider()
+                TagDisclosure(title: "道具", symbol: "sparkles", key: .toys, selection: $details.toys)
+                RowDivider()
+                TagDisclosure(title: "穿着", symbol: "tshirt", key: .outfits, selection: $details.outfits)
             }
+        }
+    }
+
+    // MARK: 安全
+
+    private var safetyCard: some View {
+        RecordCard("安全", trailing: {
+            if protection != .unrecorded {
+                Text(protection.title)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(protection.color)
+                    .transition(.opacity)
+            }
+        }) {
+            ProtectionPicker(value: $protection)
             if protection == .condom || protection == .both {
                 Toggle("破套 / 中途摘了", isOn: $condomBroke)
+                    .tint(Palette.fertile)
             }
             if pregnancyRisk {
                 Toggle("已吃紧急避孕药", isOn: $details.pillTaken)
+                    .tint(Palette.status)
             }
-        } header: {
-            Text("安全")
-        } footer: {
             if isRisky {
-                Text("有风险：保存后会提醒你按时间做检测。")
+                Label("有风险：保存后会提醒你按时间做检测。", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
                     .foregroundStyle(Palette.fertile)
+                    .transition(.opacity)
             }
         }
     }
 
-    private var detailSection: some View {
-        Section("内容") {
-            OptionMultiPicker(title: "约会内容", key: .activities, selection: $details.activities)
-            Picker("谁主动约的", selection: $details.initiator) {
-                ForEach(Choices.initiators, id: \.self) { i in
-                    Text(i.isEmpty ? "未记录" : i).tag(i)
-                }
+    // MARK: 感受
+
+    private var feelingCard: some View {
+        RecordCard("感受") {
+            ratingRow("满意度", value: $rating, identifier: "rating")
+            ratingRow("化学反应", value: $details.chemistry, identifier: "chemistry")
+            Divider()
+            VStack(spacing: 0) {
+                TagDisclosure(title: "氛围", symbol: "theatermasks", key: .moods, selection: $details.moods)
+                RowDivider()
+                TagDisclosure(title: "她的反馈", symbol: "text.bubble", key: .feedback, selection: $details.feedback)
+                RowDivider()
+                TagDisclosure(title: "事后照顾", symbol: "hands.sparkles", key: .aftercare, selection: $details.aftercare)
             }
-            OptionMultiPicker(title: "体位", key: .positions, selection: $details.positions)
-            OptionMultiPicker(title: "玩法 / 道具", key: .play, selection: $details.play)
         }
     }
 
-    private var costSection: some View {
-        Section {
-            ForEach($details.expenses) { $item in
-                HStack {
-                    Menu {
-                        ForEach(config.options(.expenseCategories), id: \.self) { c in
-                            Button(c) { item.category = c }
-                        }
-                    } label: {
-                        Text(item.category).frame(minWidth: 48, alignment: .leading)
+    private func ratingRow(_ title: String, value: Binding<Int>, identifier: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(RatingWords.word(value.wrappedValue) ?? "未评")
+                    .font(.caption)
+                    .foregroundStyle(value.wrappedValue > 0 ? Palette.gold : Color.secondary)
+                    .contentTransition(.opacity)
+            }
+            Spacer(minLength: 8)
+            StarPicker(value: value, identifier: identifier)
+        }
+    }
+
+    // MARK: 约会
+
+    private var dateCard: some View {
+        RecordCard("约会") {
+            TagDisclosure(title: "约会内容", symbol: "fork.knife", key: .activities, selection: $details.activities)
+            Divider()
+            VStack(alignment: .leading, spacing: 10) {
+                FieldLabel(title: "谁主动约的")
+                PillChoice(options: Choices.initiatorChoices, selection: $details.initiator, identifier: "initiator")
+            }
+        }
+    }
+
+    // MARK: 花费
+
+    private var costCard: some View {
+        RecordCard("花费", trailing: {
+            if details.totalCost > 0 {
+                Text("合计 \(Fmt.money(details.totalCost))")
+                    .font(.footnote.weight(.semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+        }) {
+            if !details.expenses.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach($details.expenses) { $item in
+                        expenseRow($item)
                     }
-                    TextField("说明", text: $item.note)
-                    DecimalField(title: "¥", value: $item.amount)
-                        .frame(width: 90)
                 }
             }
-            .onDelete { details.expenses.remove(atOffsets: $0) }
             Button {
-                details.expenses.append(ExpenseItem(category: config.options(.expenseCategories).first ?? "酒店"))
+                withAnimation(.snappy) {
+                    details.expenses.append(ExpenseItem(category: config.options(.expenseCategories).first ?? "酒店"))
+                }
             } label: {
                 Label("添加一笔", systemImage: "plus")
+                    .font(.subheadline.weight(.medium))
             }
-        } header: {
-            HStack {
-                Text("花费")
-                Spacer()
-                if details.totalCost > 0 { Text("合计 \(Fmt.money(details.totalCost))") }
-            }
+            .buttonStyle(.borderless)
         }
     }
 
-    private var feelingSection: some View {
-        Section("评价") {
-            LabeledContent("满意度") { StarRating(value: $rating) }
-            LabeledContent("化学反应") { StarRating(value: $details.chemistry) }
-            OptionMultiPicker(title: "心情 / 氛围", key: .moods, selection: $details.moods)
+    private func expenseRow(_ item: Binding<ExpenseItem>) -> some View {
+        HStack(spacing: 10) {
+            Menu {
+                ForEach(config.options(.expenseCategories), id: \.self) { c in
+                    Button(c) { item.wrappedValue.category = c }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(item.wrappedValue.category)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+            }
+            TextField("说明", text: item.note)
+                .font(.subheadline)
+            DecimalField(title: "¥ 0", value: item.amount)
+                .font(.subheadline.monospacedDigit())
+                .frame(width: 84)
+            Button {
+                removeExpense(item.wrappedValue.id)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 18))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("删除这笔")
         }
     }
 
-    private var noteSection: some View {
-        Group {
-            Section("备注") {
-                TextField("细节、对话、下次想试的…", text: $details.notes, axis: .vertical)
-                    .lineLimit(3...12)
-            }
-            Section("照片") {
-                PhotoGrid(photoIDs: $details.photoIDs)
-            }
+    /// 先收起键盘再删，避免输入框还绑着这一行
+    private func removeExpense(_ id: UUID) {
+        hideKeyboard()
+        DispatchQueue.main.async {
+            withAnimation(.snappy) { details.expenses.removeAll { $0.id == id } }
+        }
+    }
+
+    // MARK: 备注和照片
+
+    private var noteCard: some View {
+        RecordCard("备注") {
+            TextField("细节、对话、下次想试的…", text: $details.notes, axis: .vertical)
+                .lineLimit(4...14)
+        }
+    }
+
+    private var photoCard: some View {
+        RecordCard("照片") {
+            PhotoGrid(photoIDs: $details.photoIDs)
         }
     }
 
@@ -426,6 +637,14 @@ struct EncounterEditView: View {
         target.details = d
         target.place = place
         target.girls = girls
+
+        // 在这里勾选的特质写回她的档案
+        let changes = traitChanges
+        for girl in girls {
+            if let edited = changes[girl.id] {
+                girl.update { $0.traits = edited }
+            }
+        }
 
         // 第一次发生关系：把"暧昧中"自动改成"在约"
         for girl in girls where girl.status == .flirting {

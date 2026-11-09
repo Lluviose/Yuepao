@@ -57,10 +57,18 @@ struct GirlDetails: Codable, Equatable {
     var saidNotes: [NoteItem] = []
 
     // F. 亲密偏好
+    /// 特质 / 性癖，比如「恋痛」「敏感体质」
+    var traits: [String] = []
     var likedPositions: [String] = []
     var likedPlay: [String] = []
+    var likedToys: [String] = []
     var sensitiveSpots: String = ""
+    /// 底线 / 明确不接受的
     var boundaries: String = ""
+    /// 约定好的安全词：听到就立刻停
+    var safeWord: String = ""
+    /// 事后她需要的照顾
+    var aftercareNeeds: [String] = []
     var contraception: String = ""
 
     // G. 周期
@@ -135,7 +143,9 @@ struct GirlDetails: Codable, Equatable {
     }
 
     var hasIntimacy: Bool {
-        !likedPositions.isEmpty || !likedPlay.isEmpty || !sensitiveSpots.isEmpty || !boundaries.isEmpty || !contraception.isEmpty
+        !traits.isEmpty || !likedPositions.isEmpty || !likedPlay.isEmpty || !likedToys.isEmpty
+            || !sensitiveSpots.isEmpty || !boundaries.isEmpty || !safeWord.isEmpty
+            || !aftercareNeeds.isEmpty || !contraception.isEmpty
     }
 }
 
@@ -191,16 +201,31 @@ struct EncounterDetails: Codable, Equatable {
     var initiator: String = ""
     var positions: [String] = []
     var play: [String] = []
+    /// 用到的道具
+    var toys: [String] = []
+    /// 她穿了什么
+    var outfits: [String] = []
+    /// 强度 0 = 未记录，1...4 见 `Intensity`
+    var intensity: Int = 0
+    /// 谁主导：我 / 她 / 轮流
+    var lead: String = ""
     /// 她高潮次数，-1 = 未记录
     var herOrgasms: Int = -1
     var chemistry: Int = 0
     var moods: [String] = []
+    /// 她事后的反馈
+    var feedback: [String] = []
+    /// 事后照顾
+    var aftercare: [String] = []
     var expenses: [ExpenseItem] = []
     var pillTaken: Bool = false
     var notes: String = ""
     var photoIDs: [String] = []
 
     var totalCost: Double { expenses.reduce(0) { $0 + $1.amount } }
+
+    /// 体位、玩法、道具、穿着合在一起，列表里当作这次的关键词
+    var highlights: [String] { positions + play + toys + outfits }
 }
 
 struct ExpenseItem: Codable, Identifiable, Hashable {

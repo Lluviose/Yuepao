@@ -113,6 +113,7 @@ struct EncounterRow: View {
     var showPlace: Bool = true
 
     var body: some View {
+        let d = encounter.details
         HStack(spacing: 14) {
             DateChip(date: encounter.date)
             VStack(alignment: .leading, spacing: 4) {
@@ -138,14 +139,24 @@ struct EncounterRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                let tags = d.highlights
+                if !tags.isEmpty {
+                    Text(Self.tagLine(tags))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 5) {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     if encounter.stiRisk || encounter.pregnancyRisk {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(Palette.fertile)
+                    }
+                    if d.intensity > 0 {
+                        IntensityGlyph(value: d.intensity, height: 11)
                     }
                     Text("×\(encounter.count)")
                         .font(.subheadline.weight(.semibold))
@@ -157,6 +168,14 @@ struct EncounterRow: View {
             }
         }
         .padding(.vertical, 3)
+    }
+
+    /// 这次的关键词：最多三个，多的折成「+N」
+    static func tagLine(_ tags: [String]) -> String {
+        var seen = Set<String>()
+        let unique = tags.filter { seen.insert($0).inserted }
+        let shown = unique.prefix(3).joined(separator: " · ")
+        return unique.count > 3 ? shown + "  +\(unique.count - 3)" : shown
     }
 
     @ViewBuilder
