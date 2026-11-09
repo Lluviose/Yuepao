@@ -30,7 +30,7 @@ struct RecordCard<Content: View, Trailing: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+            .fill(Palette.surface))
     }
 }
 
@@ -132,7 +132,7 @@ struct TagChip: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
             .foregroundStyle(selected ? tint : Color.primary.opacity(0.82))
-            .background(Capsule().fill(selected ? tint.opacity(0.14) : Color(uiColor: .tertiarySystemFill)))
+            .background(Capsule().fill(selected ? tint.opacity(0.14) : Palette.fill))
             .overlay(Capsule().strokeBorder(selected ? tint.opacity(0.6) : Palette.hairline,
                                             lineWidth: selected ? 1 : 0.5))
             .contentShape(Capsule())
@@ -332,7 +332,7 @@ struct TagGroupView: View {
                         .foregroundStyle(tint ?? Color.primary.opacity(0.82))
                         .padding(.horizontal, 11)
                         .padding(.vertical, 5)
-                        .background(Capsule().fill(tint.map { $0.opacity(0.12) } ?? Color(uiColor: .tertiarySystemFill)))
+                        .background(Capsule().fill(tint.map { $0.opacity(0.12) } ?? Palette.fill))
                         .overlay(Capsule().strokeBorder(tint.map { $0.opacity(0.35) } ?? Palette.hairline, lineWidth: 0.5))
                 }
             }
@@ -404,7 +404,7 @@ struct CounterTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill).opacity(0.7)))
+            .fill(Palette.fill.opacity(0.7)))
         .sensoryFeedback(.selection, trigger: value)
     }
 
@@ -417,7 +417,7 @@ struct CounterTile: View {
                 .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.35))
                 .frame(maxWidth: .infinity)
                 .frame(height: 34)
-                .background(Capsule().fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                .background(Capsule().fill(Palette.surface))
                 .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 0.5))
                 .contentShape(Capsule())
         }
@@ -465,7 +465,7 @@ struct IntensityPicker: View {
     }
 
     private func barColor(_ level: Intensity, lit: Bool) -> Color {
-        guard lit else { return Color(uiColor: .tertiarySystemFill) }
+        guard lit else { return Palette.fill }
         let strength = 0.3 + 0.7 * Double(level.rawValue) / 4
         return Color.accentColor.opacity(strength)
     }
@@ -521,7 +521,7 @@ struct ProtectionPicker: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(on ? p.color.opacity(0.13) : Color(uiColor: .tertiarySystemFill).opacity(0.7)))
+                        .fill(on ? p.color.opacity(0.13) : Palette.fill.opacity(0.7)))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(on ? p.color.opacity(0.55) : Color.clear, lineWidth: 1))
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -591,6 +591,8 @@ struct MetricItem: Identifiable {
 /// 一排大数字，中间用细线隔开
 struct MetricStrip: View {
     let items: [MetricItem]
+    /// 数字的字号
+    var size: CGFloat = 24
 
     var body: some View {
         HStack(spacing: 0) {
@@ -603,10 +605,10 @@ struct MetricStrip: View {
                 VStack(spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(item.value)
-                            .font(Typo.display(24, weight: .medium))
+                            .font(Typo.display(size, weight: .medium))
                             .monospacedDigit()
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(0.6)
                         if !item.unit.isEmpty {
                             Text(item.unit)
                                 .font(.caption2)

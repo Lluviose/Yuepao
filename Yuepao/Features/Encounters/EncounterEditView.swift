@@ -153,7 +153,7 @@ struct EncounterEditView: View {
                 .padding(.top, 6)
                 .padding(.bottom, 36)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Palette.canvas)
             .formKeyboardHandling()
             .navigationTitle(encounter == nil ? "记一次" : "编辑记录")
             .navigationBarTitleDisplayMode(.inline)
@@ -619,7 +619,7 @@ struct EncounterEditView: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                .background(Capsule().fill(Palette.fill))
             }
             TextField("说明", text: item.note)
                 .font(.subheadline)
@@ -849,6 +849,7 @@ struct GirlMultiSelectView: View {
                 Text("可多选")
             }
         }
+        .paperBackground()
         .searchable(text: $search, prompt: "搜索")
         .navigationTitle("选择对象")
         .navigationBarTitleDisplayMode(.inline)

@@ -32,6 +32,16 @@ final class AppLock: ObservableObject {
         }
     }
 
+    static var biometrySymbol: String {
+        let context = LAContext()
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        switch context.biometryType {
+        case .faceID: return "faceid"
+        case .touchID: return "touchid"
+        default: return "lock.open"
+        }
+    }
+
     /// UI 测试截锁屏用
     static var previewLock: Bool { ProcessInfo.processInfo.arguments.contains("-previewLock") }
 
@@ -108,10 +118,13 @@ struct LockScreen: View {
                 BrandGlyph(size: 84)
                     .scaleEffect(appeared ? 1 : 0.85)
                     .opacity(appeared ? 1 : 0)
-                VStack(spacing: 6) {
+                VStack(spacing: 10) {
                     Text("手账")
-                        .font(Typo.display(28))
-                    Label("已锁定", systemImage: "lock")
+                        .font(Typo.display(30))
+                    Capsule()
+                        .fill(Palette.gold.opacity(0.8))
+                        .frame(width: 26, height: 1.5)
+                    Label("已锁定", systemImage: "lock.fill")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -120,15 +133,12 @@ struct LockScreen: View {
                 Button {
                     lock.authenticate()
                 } label: {
-                    Label("使用\(AppLock.biometryName)解锁", systemImage: "faceid")
-                        .font(.body.weight(.medium))
-                        .frame(maxWidth: 260)
-                        .padding(.vertical, 8)
+                    Label("使用\(AppLock.biometryName)解锁", systemImage: AppLock.biometrySymbol)
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: 230)
+                        .padding(.vertical, 3)
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .tint(.primary)
+                .buttonStyle(.wine)
                 .padding(.bottom, 48)
                 .opacity(appeared ? 1 : 0)
             }
@@ -153,10 +163,10 @@ struct PrivacyCover: View {
 struct BrandBackground: View {
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground)
-            RadialGradient(colors: [Color.accentColor.opacity(0.14), .clear],
-                           center: UnitPoint(x: 0.5, y: 0.28), startRadius: 0, endRadius: 460)
-            LinearGradient(colors: [.clear, Palette.gold.opacity(0.06)], startPoint: .top, endPoint: .bottom)
+            Palette.canvas
+            RadialGradient(colors: [Color.accentColor.opacity(0.16), .clear],
+                           center: UnitPoint(x: 0.5, y: 0.3), startRadius: 0, endRadius: 460)
+            LinearGradient(colors: [.clear, Palette.gold.opacity(0.1)], startPoint: .center, endPoint: .bottom)
         }
         .ignoresSafeArea()
     }

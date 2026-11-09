@@ -210,10 +210,10 @@ struct GirlTimelineView: View {
                 .animation(.snappy, value: filter)
             }
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Palette.canvas)
         .overlay {
             if events.isEmpty {
-                ContentUnavailableView("没有内容", systemImage: "clock")
+                EmptyState(symbol: "clock", title: "没有内容")
             }
         }
         .navigationTitle("时间线")
@@ -271,7 +271,7 @@ struct GirlTimelineView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .foregroundStyle(selected ? Color.white : Color.primary)
-            .background(selected ? color : Color(uiColor: .secondarySystemGroupedBackground), in: Capsule())
+            .background(selected ? color : Palette.surface, in: Capsule())
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: selected)

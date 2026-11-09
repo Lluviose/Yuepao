@@ -24,7 +24,11 @@ struct ChoiceChip: View {
             .padding(.vertical, 8)
             .foregroundStyle(selected ? Color.white : Color.primary)
             .background {
-                Capsule().fill(selected ? Color.accentColor : Color(uiColor: .tertiarySystemFill))
+                if selected {
+                    Capsule().fill(Palette.wineGradient)
+                } else {
+                    Capsule().fill(Palette.fill)
+                }
             }
             .overlay {
                 if !selected { Capsule().stroke(Palette.hairline, lineWidth: 0.5) }
@@ -73,7 +77,7 @@ extension View {
         self
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(uiColor: .tertiarySystemFill)))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.fill))
     }
 }
 

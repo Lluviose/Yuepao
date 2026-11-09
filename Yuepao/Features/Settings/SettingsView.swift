@@ -48,6 +48,8 @@ struct SettingsView: View {
                 dataSection
                 aboutSection
             }
+            .paperBackground()
+            .tint(Color.accentColor)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -130,13 +132,17 @@ struct SettingsView: View {
 
     private var securitySection: some View {
         Section {
-            Toggle("打开时需要\(AppLock.biometryName)", isOn: $lockEnabled)
+            Toggle(isOn: $lockEnabled) {
+                SettingsLabel("打开时需要\(AppLock.biometryName)", symbol: AppLock.biometrySymbol, color: Palette.status)
+            }
             if lockEnabled {
-                Picker("离开后多久锁定", selection: $lockDelay) {
+                Picker(selection: $lockDelay) {
                     Text("立即").tag(0.0)
                     Text("1 分钟").tag(60.0)
                     Text("5 分钟").tag(300.0)
                     Text("15 分钟").tag(900.0)
+                } label: {
+                    SettingsLabel("离开后多久锁定", symbol: "timer", color: Palette.todo)
                 }
             }
         } header: {
@@ -152,16 +158,20 @@ struct SettingsView: View {
 
     private var appearanceSection: some View {
         Section {
-            Picker("外观", selection: $appearance) {
+            Picker(selection: $appearance) {
                 ForEach(AppearanceMode.allCases) { m in
                     Text(m.title).tag(m.rawValue)
                 }
+            } label: {
+                SettingsLabel("外观", symbol: "circle.lefthalf.filled", color: Palette.memo)
             }
             NavigationLink {
                 AppIconPicker()
             } label: {
-                LabeledContent("App 图标") {
+                LabeledContent {
                     Text(AppIconChoice.current.title).foregroundStyle(.secondary)
+                } label: {
+                    SettingsLabel("App 图标", symbol: "app.badge", color: Palette.wineBottom)
                 }
             }
         } header: {
@@ -171,30 +181,40 @@ struct SettingsView: View {
 
     private var notificationSection: some View {
         Section {
-            Toggle("开启提醒", isOn: $notificationsEnabled)
-                .onChange(of: notificationsEnabled) { _, on in
-                    if on {
-                        Task {
-                            let granted = await Reminders.requestAuthorization()
-                            if !granted {
-                                notificationsEnabled = false
-                                message = "通知权限被拒绝了，可以去系统设置里打开。"
-                            } else {
-                                Reminders.rescheduleDates(girls: girls)
-                            }
+            Toggle(isOn: $notificationsEnabled) {
+                SettingsLabel("开启提醒", symbol: "bell.fill", color: Palette.gold)
+            }
+            .onChange(of: notificationsEnabled) { _, on in
+                if on {
+                    Task {
+                        let granted = await Reminders.requestAuthorization()
+                        if !granted {
+                            notificationsEnabled = false
+                            message = "通知权限被拒绝了，可以去系统设置里打开。"
+                        } else {
+                            Reminders.rescheduleDates(girls: girls)
                         }
-                    } else {
-                        Reminders.removeAll()
                     }
+                } else {
+                    Reminders.removeAll()
                 }
+            }
             if notificationsEnabled {
-                Toggle("隐藏通知内容", isOn: $discreetNotifications)
-                    .onChange(of: discreetNotifications) { _, _ in Reminders.rescheduleDates(girls: girls) }
-                Toggle("有风险时提醒做检测", isOn: $riskReminders)
-                Toggle("经期提醒（预计前一天晚上）", isOn: $periodReminders)
-                    .onChange(of: periodReminders) { _, _ in Reminders.rescheduleDates(girls: girls) }
-                Toggle("每周目标提醒（周四晚上）", isOn: $weeklyNudge)
-                    .onChange(of: weeklyNudge) { _, _ in AchievementCenter.shared.refresh(context: context) }
+                Toggle(isOn: $discreetNotifications) {
+                    SettingsLabel("隐藏通知内容", symbol: "eye.slash.fill", color: Palette.memo)
+                }
+                .onChange(of: discreetNotifications) { _, _ in Reminders.rescheduleDates(girls: girls) }
+                Toggle(isOn: $riskReminders) {
+                    SettingsLabel("有风险时提醒做检测", symbol: "cross.case.fill", color: Palette.status)
+                }
+                Toggle(isOn: $periodReminders) {
+                    SettingsLabel("经期提醒（预计前一天晚上）", symbol: "drop.fill", color: Palette.period)
+                }
+                .onChange(of: periodReminders) { _, _ in Reminders.rescheduleDates(girls: girls) }
+                Toggle(isOn: $weeklyNudge) {
+                    SettingsLabel("每周目标提醒（周四晚上）", symbol: "flame.fill", color: Palette.fertile)
+                }
+                .onChange(of: weeklyNudge) { _, _ in AchievementCenter.shared.refresh(context: context) }
             }
         } header: {
             Text("提醒")
@@ -205,17 +225,25 @@ struct SettingsView: View {
 
     private var customizeSection: some View {
         Section("自定义") {
-            NavigationLink("选项管理（位分、渠道、体位…）") {
+            NavigationLink {
                 OptionListsView()
+            } label: {
+                SettingsLabel("选项管理（位分、渠道、体位…）", symbol: "slider.horizontal.3", color: Palette.wineBottom)
             }
-            NavigationLink("自定义档案字段") {
+            NavigationLink {
                 CustomFieldsView()
+            } label: {
+                SettingsLabel("自定义档案字段", symbol: "text.badge.plus", color: Palette.gift)
             }
-            NavigationLink("地点管理") {
+            NavigationLink {
                 PlaceListView()
+            } label: {
+                SettingsLabel("地点管理", symbol: "mappin.and.ellipse", color: Palette.todo)
             }
-            NavigationLink("性健康检测记录") {
+            NavigationLink {
                 HealthTestListView()
+            } label: {
+                SettingsLabel("性健康检测记录", symbol: "cross.case.fill", color: Palette.status)
             }
         }
     }
@@ -254,17 +282,17 @@ struct SettingsView: View {
             Button {
                 exportSheet = true
             } label: {
-                Label("导出加密备份", systemImage: "square.and.arrow.up")
+                SettingsLabel("导出加密备份", symbol: "square.and.arrow.up", color: Palette.gold)
             }
             Button {
                 importing = true
             } label: {
-                Label("从备份恢复", systemImage: "square.and.arrow.down")
+                SettingsLabel("从备份恢复", symbol: "square.and.arrow.down", color: Palette.todo)
             }
             Button(role: .destructive) {
                 confirmWipe = true
             } label: {
-                Label("清空全部数据", systemImage: "trash")
+                SettingsLabel("清空全部数据", symbol: "trash.fill", color: Palette.period)
             }
         } header: {
             Text("数据")
@@ -476,6 +504,7 @@ struct BackupPasswordSheet: View {
                     }
                 }
             }
+            .paperBackground()
             .navigationTitle("设置备份密码")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -554,6 +583,7 @@ struct OptionListsView: View {
                 }
             }
         }
+        .paperBackground()
         .navigationTitle("选项管理")
     }
 
@@ -612,6 +642,7 @@ struct OptionEditView: View {
                 }
             }
         }
+        .paperBackground()
         .navigationTitle(key.title)
         .toolbar { EditButton() }
     }
@@ -647,6 +678,7 @@ struct CustomFieldsView: View {
                 }
             }
         }
+        .paperBackground()
         .navigationTitle("自定义字段")
         .toolbar { EditButton() }
         .sheet(item: $editing) { field in
@@ -691,6 +723,7 @@ struct CustomFieldEditor: View {
                     }
                 }
             }
+            .paperBackground()
             .navigationTitle("字段")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -799,6 +832,7 @@ struct AppIconPicker: View {
                 Text("主屏幕上的名字始终是「手账」。切换时系统会弹一个提示，属于正常现象。")
             }
         }
+        .paperBackground()
         .navigationTitle("App 图标")
         .navigationBarTitleDisplayMode(.inline)
         .sensoryFeedback(.selection, trigger: selected)
@@ -823,6 +857,43 @@ struct AppIconPicker: View {
                     selected = AppIconChoice.current
                 }
             }
+        }
+    }
+}
+
+// MARK: - 设置行
+
+/// 设置行前面的小图标：圆角方块底 + 白色图形
+struct SettingsIcon: View {
+    let symbol: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Color.white)
+            .frame(width: 29, height: 29)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(color.gradient))
+    }
+}
+
+/// 设置行的标题：图标 + 文字
+struct SettingsLabel: View {
+    let title: String
+    let symbol: String
+    let color: Color
+
+    init(_ title: String, symbol: String, color: Color) {
+        self.title = title
+        self.symbol = symbol
+        self.color = color
+    }
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            SettingsIcon(symbol: symbol, color: color)
         }
     }
 }

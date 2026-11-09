@@ -35,10 +35,10 @@ struct HealthTestListView: View {
                 try? context.save()
             }
         }
+        .paperBackground()
         .overlay {
             if tests.isEmpty {
-                ContentUnavailableView("还没有检测记录", systemImage: "cross.case",
-                                       description: Text("定期检测，对自己和别人都负责"))
+                EmptyState(symbol: "cross.case", title: "还没有检测记录", message: "定期检测，对自己和别人都负责")
             }
         }
         .navigationTitle("检测记录")

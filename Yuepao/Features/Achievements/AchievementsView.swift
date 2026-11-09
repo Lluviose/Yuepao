@@ -148,7 +148,7 @@ struct AchievementsView: View {
                         }
                         .padding(18)
                         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                            .fill(Palette.surface))
                         .padding(.horizontal, 16)
                     }
                 }
@@ -156,7 +156,7 @@ struct AchievementsView: View {
             .padding(.vertical, 12)
             .animation(.snappy, value: filter)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Palette.canvas)
         .navigationTitle("成就馆")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selected) { r in

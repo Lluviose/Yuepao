@@ -68,7 +68,7 @@ struct FoldCard<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+            .fill(Palette.surface))
     }
 }
 
@@ -146,7 +146,7 @@ struct NumberTile: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill).opacity(focused ? 1 : 0.7)))
+            .fill(Palette.fill.opacity(focused ? 1 : 0.7)))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
             .strokeBorder(focused ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1))
         .contentShape(Rectangle())
@@ -199,7 +199,7 @@ struct ScoreBar: View {
     @ViewBuilder
     private func segment(_ i: Int) -> some View {
         let bar = Capsule()
-            .fill(i <= value ? tint : Color(uiColor: .tertiarySystemFill))
+            .fill(i <= value ? tint : Palette.fill)
             .frame(height: 8)
         if editable {
             Button {
@@ -257,7 +257,7 @@ struct MBTIPicker: View {
                     side(axis.0, selected: current == axis.0) { set(current == axis.0 ? nil : axis.0, at: index) }
                     side(axis.1, selected: current == axis.1) { set(current == axis.1 ? nil : axis.1, at: index) }
                 }
-                .background(Capsule().fill(Color(uiColor: .tertiarySystemFill).opacity(0.7)))
+                .background(Capsule().fill(Palette.fill.opacity(0.7)))
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
@@ -283,7 +283,7 @@ struct MBTIPicker: View {
                 .frame(width: 34, height: 32)
                 .background {
                     if selected {
-                        Capsule().fill(Color.accentColor)
+                        Capsule().fill(Palette.wineGradient)
                     }
                 }
                 .contentShape(Capsule())
@@ -326,7 +326,7 @@ struct StatusPicker: View {
                                 .overlay(Capsule().strokeBorder(s.color.opacity(0.55), lineWidth: 1))
                                 .matchedGeometryEffect(id: "status", in: ns)
                         } else {
-                            Capsule().fill(Color(uiColor: .tertiarySystemFill))
+                            Capsule().fill(Palette.fill)
                         }
                     }
                     .contentShape(Capsule())
@@ -378,7 +378,7 @@ struct DateFieldRow: View {
                         .font(.subheadline.weight(.medium))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                        .background(Capsule().fill(Palette.fill))
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("设置\(title)")

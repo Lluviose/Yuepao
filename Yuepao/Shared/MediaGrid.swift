@@ -93,7 +93,7 @@ struct MediaGrid: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(uiColor: .tertiarySystemFill)))
+                .fill(Palette.fill))
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.chip)
@@ -237,7 +237,7 @@ struct MediaTile: View {
     }
 
     var body: some View {
-        Color(uiColor: .tertiarySystemFill)
+        Palette.fill
             .overlay {
                 if let image {
                     Image(uiImage: image)
@@ -306,7 +306,7 @@ struct MediaTile: View {
 private struct ImportingTile: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
+            .fill(Palette.fill)
             .overlay { ProgressView() }
     }
 }

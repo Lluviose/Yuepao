@@ -248,15 +248,13 @@ struct AgendaScreen: View {
                 if events.isEmpty {
                     HStack {
                         Spacer()
-                        VStack(spacing: 6) {
-                            Image(systemName: "sparkles")
-                                .font(.title3)
-                                .foregroundStyle(.tertiary)
+                        VStack(spacing: 8) {
+                            IconBadge(symbol: "moon.stars", color: Palette.gold, size: 40)
                             Text("这天没有安排")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 12)
                         Spacer()
                     }
                 } else {
@@ -279,13 +277,24 @@ struct AgendaScreen: View {
 
             Section {
                 HStack(spacing: 10) {
-                    addButton("记一次", "heart.fill") { creatingEncounter = true }
-                    addButton("加待办", "checklist") { creatingTodo = true }
+                    Button {
+                        creatingEncounter = true
+                    } label: {
+                        Label("记一次", systemImage: "heart.fill")
+                    }
+                    .buttonStyle(.wine(fill: true, glow: false))
+                    Button {
+                        creatingTodo = true
+                    } label: {
+                        Label("加待办", systemImage: "checklist")
+                    }
+                    .buttonStyle(.quiet(fill: true))
                 }
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             }
         }
+        .paperBackground()
         .listSectionSpacing(.compact)
     }
 
@@ -319,17 +328,6 @@ struct AgendaScreen: View {
             RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 12, height: 8)
             Text(text)
         }
-    }
-
-    private func addButton(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.subheadline.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.borderless)
     }
 
     private func dayTitle(_ date: Date) -> String {
@@ -393,16 +391,12 @@ struct AgendaScreen: View {
         List {
             TodoListSections(todos: todos, girls: girls) { editingTodo = $0 }
         }
+        .paperBackground()
         .overlay {
             if todos.isEmpty {
-                ContentUnavailableView {
-                    Label("没有待办", systemImage: "checklist")
-                } description: {
-                    Text("约会安排、礼物、回消息…记下来到点提醒你")
-                } actions: {
-                    Button("加一条") { creatingTodo = true }
-                        .buttonStyle(.borderedProminent)
-                }
+                EmptyState(symbol: "checklist", title: "没有待办",
+                           message: "约会安排、礼物、回消息…记下来到点提醒你",
+                           actionTitle: "加一条", action: { creatingTodo = true })
             }
         }
     }

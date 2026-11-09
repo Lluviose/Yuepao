@@ -97,7 +97,7 @@ struct GirlEditView: View {
                 .padding(.top, 6)
                 .padding(.bottom, 36)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Palette.canvas)
             .formKeyboardHandling()
             .navigationTitle(isNew ? "新建档案" : "编辑档案")
             .navigationBarTitleDisplayMode(.inline)
@@ -212,7 +212,7 @@ struct GirlEditView: View {
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
                         .background(Circle().fill(Color.accentColor))
-                        .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 3))
+                        .overlay(Circle().stroke(Palette.surface, lineWidth: 3))
                         .offset(x: 2, y: 2)
                 }
                 .id(draft.avatarID ?? "none")
@@ -225,7 +225,7 @@ struct GirlEditView: View {
 
     /// 有头像时用模糊的照片做底；没有时用代号对应的色调，边输入边变
     private var identityBackground: some View {
-        let card = Color(uiColor: .secondarySystemGroupedBackground)
+        let card = Palette.surface
         return ZStack {
             card
             if let id = draft.avatarID, let image = MediaStore.shared.thumbnail(id, size: 192) {
@@ -681,7 +681,7 @@ struct GirlEditView: View {
         .foregroundStyle(.primary)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+        .background(Capsule().fill(Palette.fill))
     }
 
     private func removeButton(_ action: @escaping () -> Void) -> some View {

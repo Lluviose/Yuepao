@@ -374,7 +374,7 @@ struct TodoEditView: View {
                     .padding(.vertical, 8)
                 }
                 .padding(.horizontal, 14)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(uiColor: .tertiarySystemFill)))
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Palette.fill))
                 .transition(.opacity.combined(with: .move(edge: .top)))
 
                 if remind && !Reminders.enabled {

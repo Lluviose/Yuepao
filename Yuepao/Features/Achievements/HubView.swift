@@ -38,7 +38,7 @@ struct HubView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Palette.canvas)
             .navigationTitle("成就")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -234,7 +234,7 @@ struct HubView: View {
         }
         .buttonStyle(.plain)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+            .fill(Palette.surface))
     }
 }
 
@@ -271,7 +271,7 @@ struct HubCard<Content: View>: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+            .fill(Palette.surface))
     }
 }
 
@@ -307,7 +307,7 @@ struct CollectionTile: View {
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+            .fill(Palette.surface))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Palette.hairline, lineWidth: 0.5))
     }
 }
@@ -401,7 +401,7 @@ struct WeeklyGoalCard: View {
         }
         .padding(18)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+            .fill(Palette.surface))
         .onAppear {
             withAnimation(.smooth(duration: 1.0).delay(0.2)) { animated = true }
         }

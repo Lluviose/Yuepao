@@ -38,7 +38,7 @@ struct CycleRing: View {
             VStack(spacing: 2) {
                 if let current {
                     Text("第 \(current.day) 天")
-                        .font(.system(size: size * 0.16, weight: .semibold, design: .rounded))
+                        .font(.system(size: size * 0.16, weight: .semibold, design: .serif))
                         .contentTransition(.numericText())
                     if let phase = info.phase(on: Date()) {
                         Text(phase.title)
@@ -111,7 +111,7 @@ struct CycleCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(value)
                     .font(.subheadline.weight(.semibold))
-                    .fontDesign(.rounded)
+                    .fontDesign(.serif)
                     .foregroundStyle(color == .secondary ? Color.primary : color)
                 if let detail {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
@@ -223,6 +223,7 @@ struct GirlCycleView: View {
                 Text("预测基于最近 6 次记录的平均值，仅供参考，不能代替避孕措施。")
             }
         }
+        .paperBackground()
         .navigationTitle("\(girl.name) 的周期")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { entry in
@@ -381,7 +382,7 @@ struct PeriodEditSheet: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(active ? Palette.period.opacity(0.12) : Color(uiColor: .tertiarySystemFill))
+                    .fill(active ? Palette.period.opacity(0.12) : Palette.fill)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)

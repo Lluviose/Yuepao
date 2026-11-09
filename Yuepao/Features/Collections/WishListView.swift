@@ -52,18 +52,14 @@ struct WishListView: View {
                 }
             }
         }
+        .paperBackground()
         .listSectionSpacing(.compact)
         .overlay {
             if wishes.isEmpty {
-                ContentUnavailableView {
-                    Label("还没有心愿", systemImage: "star")
-                } description: {
-                    Text("想去的酒店、想试的玩法、想和她一起做的事，都可以写下来")
-                } actions: {
-                    Button("写一个") { creating = true }
-                        .buttonStyle(.borderedProminent)
-                }
-                .padding(.top, 120)
+                EmptyState(symbol: "star", title: "还没有心愿",
+                           message: "想去的酒店、想试的玩法、想和她一起做的事，都可以写下来",
+                           actionTitle: "写一个", action: { creating = true })
+                    .padding(.top, 120)
             }
         }
         .navigationTitle("心愿清单")

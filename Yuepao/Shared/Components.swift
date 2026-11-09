@@ -93,7 +93,7 @@ struct Badge: View {
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
+        .background(Palette.fill, in: Capsule())
     }
 }
 
@@ -150,7 +150,7 @@ struct ChipsView: View {
                     .foregroundStyle(Color.primary.opacity(0.8))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                    .background(Capsule().fill(Palette.fill))
                     .overlay(Capsule().stroke(Palette.hairline, lineWidth: 0.5))
             }
         }
@@ -195,6 +195,51 @@ struct StarDisplay: View {
 }
 
 // MARK: - 空状态 / 信息行
+
+/// 空状态：两圈淡酒红的圆底托着图标，衬线标题，下面可以带一个主按钮
+struct EmptyState: View {
+    let symbol: String
+    let title: String
+    var message: String?
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.06))
+                    .frame(width: 116, height: 116)
+                Circle()
+                    .fill(Color.accentColor.opacity(0.09))
+                    .frame(width: 82, height: 82)
+                Image(systemName: symbol)
+                    .font(.system(size: 30, weight: .light))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .accessibilityHidden(true)
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(Typo.display(21))
+                if let message, !message.isEmpty {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.wine)
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, 40)
+        .frame(maxWidth: .infinity)
+    }
+}
 
 struct InfoRow: View {
     let label: String

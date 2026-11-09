@@ -51,45 +51,47 @@ struct GirlListView: View {
         NavigationStack {
             List {
                 if !girls.isEmpty {
-                    summary
+                    Section {
+                        summary
+                    }
                 }
-                ForEach(filtered) { girl in
-                    NavigationLink {
-                        GirlDetailView(girl: girl)
-                            .zoomDestination(id: girl.id, in: zoom)
-                    } label: {
-                        GirlRow(girl: girl)
-                            .zoomSource(id: girl.id, in: zoom)
-                    }
-                    .swipeActions {
-                        Button("删除", role: .destructive) { pendingDelete = girl }
-                    }
-                    .swipeActions(edge: .leading) {
-                        Button {
-                            loggingFor = girl
+                Section {
+                    ForEach(filtered) { girl in
+                        NavigationLink {
+                            GirlDetailView(girl: girl)
+                                .zoomDestination(id: girl.id, in: zoom)
                         } label: {
-                            Label("记一次", systemImage: "heart.fill")
+                            GirlRow(girl: girl)
+                                .zoomSource(id: girl.id, in: zoom)
                         }
-                        .tint(.accentColor)
-                        Button {
-                            withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
-                            Haptics.light()
-                        } label: {
-                            Label("联系过", systemImage: "message.fill")
+                        .swipeActions {
+                            Button("删除", role: .destructive) { pendingDelete = girl }
                         }
-                        .tint(Palette.todo)
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                loggingFor = girl
+                            } label: {
+                                Label("记一次", systemImage: "heart.fill")
+                            }
+                            .tint(.accentColor)
+                            Button {
+                                withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
+                                Haptics.light()
+                            } label: {
+                                Label("联系过", systemImage: "message.fill")
+                            }
+                            .tint(Palette.todo)
+                        }
                     }
                 }
             }
+            .paperBackground()
+            .listSectionSpacing(.compact)
             .overlay {
                 if girls.isEmpty {
-                    ContentUnavailableView {
-                        Label("还没有档案", systemImage: "person.crop.circle.badge.plus")
-                    } description: {
-                        Text("点右上角 + 新建第一个档案")
-                    } actions: {
-                        Button("新建档案") { creating = true }.buttonStyle(.borderedProminent)
-                    }
+                    EmptyState(symbol: "person.crop.circle.badge.plus", title: "还没有档案",
+                               message: "建一份档案，把她的样子、喜好和你们的故事记下来",
+                               actionTitle: "新建档案", action: { creating = true })
                 } else if filtered.isEmpty {
                     ContentUnavailableView.search
                 }
@@ -139,13 +141,13 @@ struct GirlListView: View {
         let harem = girls.filter { $0.status.inHarem }.count
         let flirting = girls.filter { $0.status == .flirting }.count
         return HStack(spacing: 0) {
-            SummaryCell(value: "\(harem)", label: "后宫")
-            Divider()
-            SummaryCell(value: "\(flirting)", label: "暧昧中")
-            Divider()
-            SummaryCell(value: "\(girls.count)", label: "全部档案")
+            SummaryCell(value: "\(harem)", label: "后宫", tint: RelationStatus.steady.color)
+            SummaryDivider()
+            SummaryCell(value: "\(flirting)", label: "暧昧中", tint: RelationStatus.flirting.color)
+            SummaryDivider()
+            SummaryCell(value: "\(girls.count)", label: "全部档案", tint: Color.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 
     private var filterMenu: some View {
@@ -177,16 +179,38 @@ struct GirlListView: View {
     }
 }
 
+/// 列表顶上的一格统计：大号衬线数字，下面是带小色点的说明
 struct SummaryCell: View {
     let value: String
     let label: String
+    var tint: Color?
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(value).font(.title2.weight(.semibold)).statNumber()
-            Text(label).font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 4) {
+            Text(value)
+                .font(Typo.display(28, weight: .medium))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            HStack(spacing: 5) {
+                if let tint {
+                    Circle().fill(tint).frame(width: 5, height: 5)
+                }
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// 统计格之间的短竖线
+struct SummaryDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Palette.hairline)
+            .frame(width: 0.5, height: 34)
     }
 }
 

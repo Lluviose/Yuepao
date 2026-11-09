@@ -127,15 +127,12 @@ struct EncounterListView: View {
                     }
                 }
             }
+            .paperBackground()
             .overlay {
                 if encounters.isEmpty {
-                    ContentUnavailableView {
-                        Label("还没有记录", systemImage: "heart.text.square")
-                    } description: {
-                        Text("点右上角 + 记录一次")
-                    } actions: {
-                        Button("记一次") { creating = true }.buttonStyle(.borderedProminent)
-                    }
+                    EmptyState(symbol: "heart.text.square", title: "还没有记录",
+                               message: "每次约会记一笔，时间、地点和感受都留得住",
+                               actionTitle: "记一次", action: { creating = true })
                 } else if filtered.isEmpty {
                     ContentUnavailableView.search
                 }
@@ -209,7 +206,7 @@ struct EncounterRow: View {
                 if !tags.isEmpty {
                     Text(Self.tagLine(tags))
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(0.8))
                         .lineLimit(1)
                 }
             }
@@ -251,7 +248,7 @@ struct EncounterRow: View {
             HStack(spacing: -6) {
                 ForEach(girls) { g in
                     AvatarView(photoID: g.avatarID, name: g.name, size: 20)
-                        .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 1.5))
+                        .overlay(Circle().stroke(Palette.surface, lineWidth: 1.5))
                 }
             }
         }
@@ -279,7 +276,7 @@ struct PersonFilterChip: View {
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(Color.accentColor)
                             .frame(width: 44, height: 44)
-                            .background(Circle().fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                            .background(Circle().fill(Palette.surface))
                     }
                 }
                 .overlay {
@@ -295,7 +292,7 @@ struct PersonFilterChip: View {
                         .padding(.horizontal, 5)
                         .frame(minWidth: 18, minHeight: 18)
                         .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.6)))
-                        .overlay(Capsule().stroke(Color(uiColor: .systemGroupedBackground), lineWidth: 2))
+                        .overlay(Capsule().stroke(Palette.canvas, lineWidth: 2))
                         .offset(x: 6, y: -4)
                 }
                 Text(girl?.name ?? "全部")

@@ -106,7 +106,7 @@ struct PlaceEditView: View {
                 .padding(.top, 6)
                 .padding(.bottom, 36)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Palette.canvas)
             .formKeyboardHandling()
             .navigationTitle(place == nil ? "新建地点" : "编辑地点")
             .navigationBarTitleDisplayMode(.inline)
@@ -142,7 +142,7 @@ struct PlaceEditView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 11)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(on ? Color.accentColor.opacity(0.12) : Color(uiColor: .tertiarySystemFill).opacity(0.7)))
+                        .fill(on ? Color.accentColor.opacity(0.12) : Palette.fill.opacity(0.7)))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(on ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1))
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -252,6 +252,7 @@ struct PlaceSelectView: View {
                 }
             }
         }
+        .paperBackground()
         .searchable(text: $search, prompt: "搜索地点")
         .navigationTitle("选择地点")
         .navigationBarTitleDisplayMode(.inline)
@@ -312,9 +313,10 @@ struct PlaceListView: View {
                 }
             }
         }
+        .paperBackground()
         .overlay {
             if places.isEmpty {
-                ContentUnavailableView("还没有地点", systemImage: "mappin.slash", description: Text("记录约会时可以顺手新建地点"))
+                EmptyState(symbol: "mappin.and.ellipse", title: "还没有地点", message: "记录约会时可以顺手新建地点")
             }
         }
         .navigationTitle("地点")
@@ -420,7 +422,7 @@ struct PlaceDetailView: View {
                                 .padding(.leading, 4)
                                 .padding(.trailing, 12)
                                 .padding(.vertical, 4)
-                                .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                                .background(Capsule().fill(Palette.fill))
                                 .contentShape(Capsule())
                             }
                             .buttonStyle(.chip)
@@ -442,6 +444,7 @@ struct PlaceDetailView: View {
                 }
             }
         }
+        .paperBackground()
         .navigationTitle(place.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $openGirl) { girl in

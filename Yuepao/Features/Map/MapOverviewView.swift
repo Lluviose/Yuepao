@@ -81,8 +81,9 @@ struct MapOverviewView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     header(rows)
                     if rows.isEmpty {
-                        ContentUnavailableView("还没有城市数据", systemImage: "building.2",
-                                               description: Text("给档案和地点填上城市，就会出现在这里"))
+                        EmptyState(symbol: "building.2", title: "还没有城市数据",
+                                   message: "给档案和地点填上城市，就会出现在这里")
+                            .padding(.vertical, 12)
                     } else {
                         citySection(rows)
                     }
@@ -159,7 +160,7 @@ struct MapOverviewView: View {
                     .accessibilityIdentifier("city-\(row.city)")
                 }
             }
-            .background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.7),
+            .background(Palette.surface.opacity(0.7),
                         in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
@@ -239,7 +240,7 @@ struct MapOverviewView: View {
                     .disabled(rank.place.coordinate == nil)
                 }
             }
-            .background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.7),
+            .background(Palette.surface.opacity(0.7),
                         in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
@@ -261,7 +262,7 @@ struct MapOverviewView: View {
             }
         }
         .buttonStyle(.plain)
-        .background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.7),
+        .background(Palette.surface.opacity(0.7),
                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 

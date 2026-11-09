@@ -72,8 +72,7 @@ struct MonthCalendarView: View {
     private var header: some View {
         HStack(spacing: 14) {
             Text(Fmt.month(month))
-                .font(.title3.weight(.semibold))
-                .fontDesign(.rounded)
+                .font(Typo.display(20))
                 .contentTransition(.numericText())
             Spacer()
             if !cal.isDate(month, equalTo: Date(), toGranularity: .month) || !cal.isDateInToday(selection) {
@@ -159,7 +158,8 @@ private struct DayCell: View {
             ZStack {
                 if isSelected {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(Palette.wineGradient)
+                        .shadow(color: Palette.wineBottom.opacity(0.28), radius: 5, y: 2)
                         .matchedGeometryEffect(id: "selection", in: namespace)
                 } else if isToday {
                     Circle().stroke(Color.accentColor.opacity(0.6), lineWidth: 1.5)
@@ -169,7 +169,8 @@ private struct DayCell: View {
                         .strokeBorder(Palette.fertile, style: StrokeStyle(lineWidth: 1.5, dash: [2.5, 2.5]))
                 }
                 Text("\(Calendar.current.component(.day, from: date))")
-                    .font(.system(size: 16, weight: isToday || isSelected ? .semibold : .regular, design: .rounded))
+                    .font(.system(size: 16, weight: isToday || isSelected ? .semibold : .regular, design: .serif))
+                    .monospacedDigit()
                     .foregroundStyle(textColor)
             }
             .frame(width: 34, height: 34)

@@ -61,12 +61,9 @@ struct AlbumView: View {
         let captions = Dictionary(all.map { ($0.id, $0.caption) }, uniquingKeysWith: { first, _ in first })
         ScrollView {
             if all.isEmpty {
-                ContentUnavailableView {
-                    Label("还没有照片或视频", systemImage: "photo.on.rectangle.angled")
-                } description: {
-                    Text("在记录或档案里添加，原画质加密保存在这台手机上，不进系统相册。")
-                }
-                .padding(.top, 80)
+                EmptyState(symbol: "photo.on.rectangle.angled", title: "还没有照片或视频",
+                           message: "在记录或档案里添加，原画质加密保存在这台手机上，不进系统相册。")
+                    .padding(.top, 80)
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     header
@@ -91,7 +88,7 @@ struct AlbumView: View {
                 .padding(.bottom, 24)
             }
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Palette.canvas)
         .navigationTitle(girl.map { "\($0.name)的相册" } ?? "相册")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: all.count) { await load(all.map(\.id)) }

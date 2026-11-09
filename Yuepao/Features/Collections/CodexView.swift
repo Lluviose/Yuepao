@@ -119,7 +119,7 @@ struct CodexView: View {
             }
             .padding(16)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Palette.canvas)
         .navigationTitle("图鉴")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -180,7 +180,7 @@ struct CodexCard: View {
                 .fill(item.unlocked
                       ? AnyShapeStyle(LinearGradient(colors: [Palette.gold.opacity(0.14), Palette.gold.opacity(0.04)],
                                                      startPoint: .top, endPoint: .bottom))
-                      : AnyShapeStyle(Color(uiColor: .secondarySystemGroupedBackground)))
+                      : AnyShapeStyle(Palette.surface))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)

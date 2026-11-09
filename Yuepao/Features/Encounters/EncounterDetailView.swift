@@ -33,7 +33,7 @@ struct EncounterDetailView: View {
             .padding(.top, 4)
             .padding(.bottom, 32)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Palette.canvas)
         .navigationTitle(Fmt.shortDate(encounter.date))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -146,7 +146,7 @@ struct EncounterDetailView: View {
 
     /// 这次拍了照片就用第一张模糊后做底，没有就用她的头像，再没有用她的头像色调
     private var heroBackground: some View {
-        let card = Color(uiColor: .secondarySystemGroupedBackground)
+        let card = Palette.surface
         let first = encounter.girls.first
         let backdrop = encounter.details.photoIDs.first ?? first?.avatarID
         return ZStack {

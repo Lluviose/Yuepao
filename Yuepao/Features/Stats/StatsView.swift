@@ -39,6 +39,7 @@ struct StatsView: View {
             safetySection(stats)
             spendingSection(stats)
         }
+        .paperBackground()
         .navigationTitle("统计")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -88,13 +89,16 @@ struct StatsView: View {
 
     private func overviewSection(_ s: StatsData) -> some View {
         Section("总览") {
+            MetricStrip(items: [
+                MetricItem(label: "累计次数", value: "\(s.encounters.count)"),
+                MetricItem(label: "累计回合", value: "\(s.totalRounds)"),
+                MetricItem(label: "去过的地点", value: "\(s.placeCount)")
+            ], size: 30)
+            .padding(.vertical, 10)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                 StatCell(value: "\(s.haremCount)", label: "后宫")
                 StatCell(value: "\(s.flirtingCount)", label: "暧昧中")
                 StatCell(value: "\(s.conquered)", label: "累计拿下")
-                StatCell(value: "\(s.encounters.count)", label: "累计次数")
-                StatCell(value: "\(s.totalRounds)", label: "累计回合")
-                StatCell(value: "\(s.placeCount)", label: "去过的地点")
                 StatCell(value: "\(s.thisMonth)", label: "本月次数")
                 StatCell(value: "\(s.thisYear)", label: "今年次数")
                 StatCell(value: s.averageGap.map { "\($0) 天" } ?? "—", label: "平均间隔")
@@ -119,7 +123,7 @@ struct StatsView: View {
                     if isSelected {
                         Text("\(item.count)")
                             .font(.caption.weight(.bold))
-                            .fontDesign(.rounded)
+                            .fontDesign(.serif)
                             .foregroundStyle(Color.accentColor)
                     }
                 }

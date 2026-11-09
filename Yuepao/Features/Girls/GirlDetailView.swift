@@ -60,6 +60,7 @@ struct GirlDetailView: View {
                 }
             }
         }
+        .paperBackground()
         .listSectionSpacing(.compact)
         .overlay(alignment: .top) {
             if let toast {
@@ -190,7 +191,7 @@ struct GirlDetailView: View {
                         .frame(maxWidth: .infinity)
                 }
                 HStack(spacing: 0) {
-                    QuickAction(title: "记一次", symbol: "heart", tint: .accentColor) { sheet = .encounter }
+                    QuickAction(title: "记一次", symbol: "heart.fill", prominent: true) { sheet = .encounter }
                         .accessibilityIdentifier("logEncounter")
                     QuickAction(title: "联系过", symbol: "bubble.left") {
                         withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
@@ -212,7 +213,7 @@ struct GirlDetailView: View {
     @ViewBuilder
     private var heroBackground: some View {
         ZStack {
-            Color(uiColor: .secondarySystemGroupedBackground)
+            Palette.surface
             if let id = girl.avatarID, let image = MediaStore.shared.thumbnail(id, size: 192) {
                 Image(uiImage: image)
                     .resizable()
@@ -223,7 +224,7 @@ struct GirlDetailView: View {
             } else {
                 Palette.avatarGradient(for: girl.name).opacity(0.28)
             }
-            LinearGradient(colors: [.clear, Color(uiColor: .secondarySystemGroupedBackground).opacity(0.92)],
+            LinearGradient(colors: [.clear, Palette.surface.opacity(0.92)],
                            startPoint: .center, endPoint: .bottom)
         }
     }
@@ -241,10 +242,13 @@ struct GirlDetailView: View {
         let known = d.metDate ?? girl.createdAt
         let spending = girl.encounterSpending + d.giftSpending
         return Section("概况") {
+            MetricStrip(items: [
+                MetricItem(label: "约会次数", value: "\(girl.encounters.count)"),
+                MetricItem(label: "总回合", value: "\(girl.totalRounds)"),
+                MetricItem(label: "上次见面", value: Fmt.daysAgo(girl.lastEncounterDate))
+            ], size: 26)
+            .padding(.vertical, 8)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                StatCell(value: "\(girl.encounters.count)", label: "约会次数")
-                StatCell(value: "\(girl.totalRounds)", label: "总回合")
-                StatCell(value: Fmt.daysAgo(girl.lastEncounterDate), label: "上次见面")
                 StatCell(value: "\(max(Fmt.days(from: known), 0))", label: "认识天数")
                 StatCell(value: Fmt.money(spending), label: "总投入")
                 StatCell(value: "\(d.intimacy)", label: "亲密度")
@@ -772,15 +776,20 @@ struct StatCell: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Text(value)
-                .font(.headline)
-                .statNumber()
+                .font(Typo.display(19, weight: .medium))
+                .monospacedDigit()
+                .contentTransition(.numericText())
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1094,6 +1103,7 @@ struct GirlEncountersView: View {
                 }
             }
         }
+        .paperBackground()
         .navigationTitle("和\(girl.name)的记录")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -1158,7 +1168,7 @@ struct StatusHistoryView: View {
                             Circle()
                                 .fill(status.color)
                                 .frame(width: 12, height: 12)
-                                .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 2))
+                                .overlay(Circle().stroke(Palette.surface, lineWidth: 2))
                             Rectangle()
                                 .fill(index == list.count - 1 ? Color.clear : Color.secondary.opacity(0.2))
                                 .frame(width: 2)
@@ -1185,6 +1195,7 @@ struct StatusHistoryView: View {
                 }
             }
         }
+        .paperBackground()
         .navigationTitle("状态变化")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -1268,7 +1279,7 @@ struct HabitsView: View {
                         .font(.footnote)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                        .background(Capsule().fill(Palette.fill))
                     }
                 }
             }

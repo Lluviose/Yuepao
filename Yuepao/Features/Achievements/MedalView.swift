@@ -101,7 +101,7 @@ struct MedalView: View {
     private var lockedMedal: some View {
         ZStack {
             Circle()
-                .fill(Color(uiColor: .tertiarySystemFill))
+                .fill(Palette.fill)
             Circle()
                 .inset(by: size * 0.06)
                 .stroke(Color.secondary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [2.5, 3]))

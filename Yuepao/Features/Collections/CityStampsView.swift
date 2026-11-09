@@ -96,7 +96,7 @@ struct CityStampsView: View {
             }
             .padding(16)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Palette.canvas)
         .navigationTitle("城市印章")
         .navigationBarTitleDisplayMode(.inline)
     }

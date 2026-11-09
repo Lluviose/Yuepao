@@ -66,12 +66,10 @@ struct CelebrationView: View {
                 } label: {
                     Text("收下")
                         .font(.body.weight(.semibold))
-                        .frame(maxWidth: 200)
-                        .padding(.vertical, 6)
+                        .frame(maxWidth: 180)
+                        .padding(.vertical, 3)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
+                .buttonStyle(.wine)
                 .padding(.top, 8)
                 .opacity(appear ? 1 : 0)
                 .accessibilityIdentifier("dismissCelebration")
