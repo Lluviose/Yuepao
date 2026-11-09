@@ -107,6 +107,9 @@ enum TestSupport {
         let toySets: [[String]] = [["跳蛋"], [], ["按摩油"], [], ["眼罩"]]
         let outfitSets: [[String]] = [["丝袜"], [], ["情趣内衣"], []]
         let leads = ["我", "她", "", "轮流"]
+        // 演示照片：小美的相册、阿雪最近那次（照片 + 实况 + 视频）、小美最近那次
+        let media = DemoMedia.seed()
+        mei.update { $0.photoIDs = media.profile }
         for (i, item) in plan.enumerated() {
             let e = Encounter(date: daysAgo(item.2, hour: item.3))
             context.insert(e)
@@ -142,7 +145,9 @@ enum TestSupport {
                 d.feedback = ["很满足", "有点疼"]
                 d.aftercare = ["拥抱", "冷敷 / 涂药", "喝水"]
                 d.notes = "她说下次想试试低温蜡烛，力度保持这次就好。"
+                d.photoIDs = media.record
             }
+            if i == 0 { d.photoIDs = media.single }
             d.expenses = [ExpenseItem(category: "酒店", amount: item.1.type == .hotel ? 680 : 0),
                           ExpenseItem(category: "餐饮", amount: 200)]
                 .filter { $0.amount > 0 }

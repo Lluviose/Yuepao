@@ -457,6 +457,72 @@ final class SmokeTests: XCTestCase {
         }
     }
 
+    /// 照片视频：记录里的照片墙、全屏看照片 / 实况 / 视频、相册页、档案相册
+    func testMediaGallery() {
+        let app = makeApp(seed: true)
+        app.launch()
+        // 演示用的实况和视频在后台生成，等一下
+        sleep(5)
+        tapTab(app, "记录")
+        let filter = app.buttons["filter-阿雪"].firstMatch
+        if filter.waitForExistence(timeout: 3) { filter.tap() }
+        let record = app.staticTexts["阿雪"].firstMatch
+        XCTAssertTrue(record.waitForExistence(timeout: 5))
+        record.tap()
+        sleep(2)
+        let first = app.buttons["media-0"].firstMatch
+        if scrollTo(first, in: app, maxSwipes: 3) {
+            sleep(1)
+            shot(app, "m1-record-media")
+            first.tap()
+            sleep(2)
+            shot(app, "m2-viewer-photo")
+            app.swipeLeft()
+            sleep(2)
+            shot(app, "m3-viewer-live")
+            app.swipeLeft()
+            sleep(3)
+            shot(app, "m4-viewer-video")
+            let close = app.buttons["closeViewer"].firstMatch
+            if close.waitForExistence(timeout: 3) && close.isHittable {
+                close.tap()
+                sleep(1)
+            }
+        }
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        sleep(1)
+
+        // 相册：全部照片视频按月份排
+        tapTab(app, "成就")
+        sleep(1)
+        let album = app.buttons["openAlbum"].firstMatch
+        if scrollTo(album, in: app) {
+            album.tap()
+            sleep(2)
+            shot(app, "m5-album")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+
+        // 档案里的相册
+        tapTab(app, "后宫")
+        let mei = app.staticTexts["小美"].firstMatch
+        if mei.waitForExistence(timeout: 5) {
+            mei.tap()
+            sleep(2)
+            let albumLink = app.buttons["openGirlAlbum"].firstMatch
+            if scrollTo(albumLink, in: app, maxSwipes: 12) {
+                sleep(1)
+                shot(app, "m6-profile-photos")
+                if albumLink.isHittable {
+                    albumLink.tap()
+                    sleep(2)
+                    shot(app, "m7-girl-album")
+                }
+            }
+        }
+    }
+
     /// 万一弹出了详情之类的页面，往下拖关掉，回到地图
     private func dismissSheetIfNeeded(_ app: XCUIApplication) {
         let bar = app.navigationBars.firstMatch

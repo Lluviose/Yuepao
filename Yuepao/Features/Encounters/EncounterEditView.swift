@@ -26,6 +26,10 @@ struct EncounterEditView: View {
     @State private var originalTraits: [UUID: [String]]
     @State private var riskAlert = false
     @State private var confirmDiscard = false
+    /// 刚加的照片里最早的拍摄时间（和记录时间差得多时提示可以用它）
+    @State private var photoDate: Date?
+    /// 这次编辑里新加过的照片视频（包括加了又删掉的），取消或保存时清理没用上的文件
+    @State private var sessionMedia: Set<String> = []
 
     private let originalPhotos: Set<String>
     private let initialSnapshot: Snapshot
@@ -653,8 +657,35 @@ struct EncounterEditView: View {
     }
 
     private var photoCard: some View {
-        RecordCard("照片") {
-            PhotoGrid(photoIDs: $details.photoIDs)
+        RecordCard("照片与视频", trailing: {
+            Text("原画质")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+        }) {
+            VStack(alignment: .leading, spacing: 12) {
+                MediaGrid(ids: $details.photoIDs)
+                if let photoDate, abs(photoDate.timeIntervalSince(date)) > 30 * 60 {
+                    Button {
+                        withAnimation(.snappy) { date = photoDate }
+                        Haptics.light()
+                    } label: {
+                        Label("按拍摄时间填：\(Fmt.row(photoDate))", systemImage: "camera")
+                            .font(.footnote.weight(.medium))
+                    }
+                    .buttonStyle(.borderless)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityIdentifier("usePhotoDate")
+                }
+            }
+        }
+        .task(id: details.photoIDs) {
+            // 只看这次新加的
+            let ids = details.photoIDs.filter { !originalPhotos.contains($0) }
+            sessionMedia.formUnion(ids)
+            let earliest = await Task.detached(priority: .utility) { () -> Date? in
+                ids.compactMap { MediaStore.shared.info($0)?.capturedAt }.min()
+            }.value
+            withAnimation(.snappy) { photoDate = earliest }
         }
     }
 
@@ -669,8 +700,8 @@ struct EncounterEditView: View {
     }
 
     private func discard() {
-        let added = Set(details.photoIDs).subtracting(originalPhotos)
-        PhotoStore.shared.delete(Array(added))
+        let added = Set(details.photoIDs).subtracting(originalPhotos).union(sessionMedia)
+        MediaStore.shared.delete(Array(added))
         dismiss()
     }
 
@@ -710,8 +741,8 @@ struct EncounterEditView: View {
             girl.update { $0.statusHistory.append(StatusChange(date: Date(), status: RelationStatus.active.rawValue)) }
         }
 
-        let removed = originalPhotos.subtracting(d.photoIDs)
-        PhotoStore.shared.delete(Array(removed))
+        let removed = originalPhotos.union(sessionMedia).subtracting(d.photoIDs)
+        MediaStore.shared.delete(Array(removed))
 
         try? context.save()
         Haptics.success()

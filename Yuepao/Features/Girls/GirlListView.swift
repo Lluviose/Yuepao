@@ -272,7 +272,7 @@ enum GirlActions {
                 context.delete(e)
             }
         }
-        PhotoStore.shared.delete(photos)
+        MediaStore.shared.delete(photos)
         context.delete(girl)
         try? context.save()
     }

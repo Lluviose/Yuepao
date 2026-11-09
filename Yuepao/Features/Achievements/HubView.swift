@@ -214,6 +214,13 @@ struct HubView: View {
             .accessibilityIdentifier("openStats")
             Divider().padding(.leading, 50)
             NavigationLink {
+                AlbumView()
+            } label: {
+                DataRow(symbol: "photo.on.rectangle.angled", title: "相册", detail: "原画质")
+            }
+            .accessibilityIdentifier("openAlbum")
+            Divider().padding(.leading, 50)
+            NavigationLink {
                 HealthTestListView()
             } label: {
                 DataRow(symbol: "cross.case", title: "检测记录", detail: nil)

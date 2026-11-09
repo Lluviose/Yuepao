@@ -20,6 +20,33 @@ struct BackupFile: Codable {
     var todos: [TodoRecord]?
     /// 0.3 起才有
     var wishes: [WishRecord]?
+    /// 2 版起照片视频不放在这里，而是跟在清单后面流式写入；这里记数量
+    var mediaCount: Int?
+
+    var mediaTotal: Int { mediaCount ?? photos.count }
+}
+
+extension BackupFile {
+    /// 去掉某些照片 / 视频的引用（比如备份时选了不带视频）
+    func removingMedia(_ removed: Set<String>) -> BackupFile {
+        guard !removed.isEmpty else { return self }
+        var copy = self
+        copy.girls = girls.map { record in
+            var record = record
+            var d = JSONCoding.decode(GirlDetails.self, from: record.detailsData, fallback: GirlDetails())
+            d.photoIDs.removeAll { removed.contains($0) }
+            record.detailsData = JSONCoding.encode(d)
+            return record
+        }
+        copy.encounters = encounters.map { record in
+            var record = record
+            var d = JSONCoding.decode(EncounterDetails.self, from: record.detailsData, fallback: EncounterDetails())
+            d.photoIDs.removeAll { removed.contains($0) }
+            record.detailsData = JSONCoding.encode(d)
+            return record
+        }
+        return copy
+    }
 }
 
 struct WishRecord: Codable {
@@ -114,7 +141,8 @@ enum BackupError: LocalizedError {
 
 @MainActor
 enum BackupService {
-    static func makeBackup(context: ModelContext, password: String) throws -> Data {
+    /// 当前全部数据（照片视频另外流式写入）
+    static func makeManifest(context: ModelContext) throws -> BackupFile {
         let girls = try context.fetch(FetchDescriptor<Girl>())
         let places = try context.fetch(FetchDescriptor<Place>())
         let encounters = try context.fetch(FetchDescriptor<Encounter>())
@@ -122,12 +150,8 @@ enum BackupService {
         let todos = try context.fetch(FetchDescriptor<TodoItem>())
         let wishes = try context.fetch(FetchDescriptor<WishItem>())
 
-        var photos: [String: Data] = [:]
-        for id in PhotoStore.shared.allIDs() {
-            if let data = PhotoStore.shared.rawData(id) { photos[id] = data }
-        }
-
-        let file = BackupFile(
+        return BackupFile(
+            version: 2,
             config: ConfigStore.shared.config,
             girls: girls.map {
                 GirlRecord(id: $0.id, createdAt: $0.createdAt, name: $0.name, statusRaw: $0.statusRaw,
@@ -149,7 +173,7 @@ enum BackupService {
                 HealthTestRecord(id: $0.id, date: $0.date, items: $0.items, result: $0.result,
                                  note: $0.note, nextDate: $0.nextDate)
             },
-            photos: photos,
+            photos: [:],
             todos: todos.map {
                 TodoRecord(id: $0.id, createdAt: $0.createdAt, title: $0.title, notes: $0.notes, dueDate: $0.dueDate,
                            hasTime: $0.hasTime, remind: $0.remind, isDone: $0.isDone, doneAt: $0.doneAt,
@@ -160,28 +184,25 @@ enum BackupService {
                            girlID: $0.girlID, isDone: $0.isDone, doneAt: $0.doneAt)
             }
         )
-
-        let json = try JSONEncoder().encode(file)
-        let compressed = try (json as NSData).compressed(using: .lzfse) as Data
-        return try BackupCrypto.encrypt(compressed, password: password)
     }
 
-    static func readBackup(_ data: Data, password: String) throws -> BackupFile {
-        let compressed = try BackupCrypto.decrypt(data, password: password)
-        guard let json = try? (compressed as NSData).decompressed(using: .lzfse) as Data,
-              let file = try? JSONDecoder().decode(BackupFile.self, from: json) else {
-            throw BackupError.badFormat
+    /// 档案头像、档案相册、记录里用到的全部照片视频
+    static func referencedMediaIDs(context: ModelContext) -> Set<String> {
+        var ids = Set<String>()
+        for g in (try? context.fetch(FetchDescriptor<Girl>())) ?? [] {
+            if let avatar = g.avatarID { ids.insert(avatar) }
+            ids.formUnion(g.details.photoIDs)
         }
-        return file
+        for e in (try? context.fetch(FetchDescriptor<Encounter>())) ?? [] {
+            ids.formUnion(e.details.photoIDs)
+        }
+        return ids
     }
 
-    /// 用备份内容覆盖当前全部数据
-    static func restore(_ file: BackupFile, context: ModelContext) throws {
+    /// 用备份里的数据替换当前全部数据。照片视频要先放进暂存目录（见 `BackupArchive`），这里一起换上
+    static func replaceAll(with file: BackupFile, context: ModelContext) throws {
         try wipeAll(context: context)
-
-        for (id, data) in file.photos {
-            PhotoStore.shared.importRaw(data, id: id)
-        }
+        try MediaStore.shared.commitStaging()
 
         var placeMap: [UUID: Place] = [:]
         for r in file.places {
@@ -282,7 +303,7 @@ enum BackupService {
         for t in try context.fetch(FetchDescriptor<TodoItem>()) { context.delete(t) }
         for w in try context.fetch(FetchDescriptor<WishItem>()) { context.delete(w) }
         try context.save()
-        PhotoStore.shared.deleteAll()
+        MediaStore.shared.deleteAll()
     }
 
     static var defaultFilename: String {
@@ -292,23 +313,269 @@ enum BackupService {
     }
 }
 
+/// 恢复前先读出来、等用户确认的备份
+struct PendingRestore {
+    enum Source {
+        /// 2 版：照片视频在文件里，确认后再流式读出
+        case archive(URL, password: String)
+        /// 1 版：整份已经在内存里
+        case legacy
+    }
+
+    let file: BackupFile
+    let source: Source
+}
+
+/// 备份文件读写（不在主线程跑）。
+/// 2 版格式：文件头 "YPBK2" + 16 字节 salt，后面是用密码派生的密钥分块加密（见 `ChunkCipher`）的一条字节流，
+/// 由若干条记录组成：[1 字节类型][8 字节长度][内容]。
+/// 依次是清单（LZFSE 压缩的 JSON）、每个照片视频文件（[2 字节名字长度][名字][原始数据]）、结束标记。
+/// 照片视频都是原文件，几个 GB 的视频也是边读边写，不会占满内存。
+enum BackupArchive {
+    static let magic = Data("YPBK2".utf8)
+    private static let legacyMagic = Data("YPBK1".utf8)
+    private static let saltSize = 16
+
+    private enum Tag: UInt8 {
+        case manifest = 1
+        case media = 2
+        case end = 0xFF
+    }
+
+    // MARK: 写
+
+    /// 写一份备份到临时目录，返回文件位置
+    static func write(manifest: BackupFile, mediaIDs: [String], password: String, filename: String,
+                      progress: @escaping (Double) -> Void) throws -> URL {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("Backup", isDirectory: true)
+        try? fm.removeItem(at: dir)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(filename)
+
+        let salt = try BackupCrypto.randomBytes(saltSize)
+        let key = try BackupCrypto.deriveKey(password: password, salt: salt)
+        let writer = try ChunkWriter(url: url, key: key, prefix: magic + salt)
+        do {
+            let json = try JSONEncoder().encode(manifest)
+            let compressed = try (json as NSData).compressed(using: .lzfse) as Data
+            try writeRecordHeader(.manifest, length: UInt64(compressed.count), to: writer)
+            try writer.write(compressed)
+
+            let store = MediaStore.shared
+            let total = max(mediaIDs.reduce(Int64(0)) { $0 + store.diskSize($1) }, 1)
+            var done: Int64 = 0
+            for id in mediaIDs {
+                try autoreleasepool {
+                    try writeMedia(id, store: store, to: writer) { bytes in
+                        done += bytes
+                        progress(min(Double(done) / Double(total), 1))
+                    }
+                }
+            }
+            try writeRecordHeader(.end, length: 0, to: writer)
+            try writer.finish()
+            progress(1)
+            return url
+        } catch {
+            writer.abort()
+            throw error
+        }
+    }
+
+    private static func writeMedia(_ id: String, store: MediaStore, to writer: ChunkWriter,
+                                   advance: (Int64) -> Void) throws {
+        guard MediaStore.isValidID(id), store.exists(id), let info = store.info(id) else { return }
+        try writeBlob(name: "\(id)/info", data: try JSONEncoder().encode(info), to: writer)
+        if let thumb = store.thumbnailData(id) {
+            try writeBlob(name: "\(id)/thumb", data: thumb, to: writer)
+        }
+        if store.isLegacy(id) {
+            guard let data = store.legacyData(id) else { return }
+            try writeBlob(name: "\(id)/main", data: data, to: writer)
+            advance(Int64(data.count))
+            return
+        }
+        for (part, role) in [(MediaStore.Part.main, "main"), (MediaStore.Part.pair, "pair")] {
+            guard let reader = try store.reader(id, part) else { continue }
+            try writeMediaHeader(name: "\(id)/\(role)", length: UInt64(reader.plainSize), to: writer)
+            try reader.forEachChunk { chunk in
+                try writer.write(chunk)
+                advance(Int64(chunk.count))
+            }
+        }
+    }
+
+    private static func writeRecordHeader(_ tag: Tag, length: UInt64, to writer: ChunkWriter) throws {
+        var header = Data([tag.rawValue])
+        header.append(ByteCoding.bytes(length, count: 8))
+        try writer.write(header)
+    }
+
+    private static func writeMediaHeader(name: String, length: UInt64, to writer: ChunkWriter) throws {
+        let nameData = Data(name.utf8)
+        try writeRecordHeader(.media, length: 2 + UInt64(nameData.count) + length, to: writer)
+        var header = ByteCoding.bytes(UInt64(nameData.count), count: 2)
+        header.append(nameData)
+        try writer.write(header)
+    }
+
+    private static func writeBlob(name: String, data: Data, to writer: ChunkWriter) throws {
+        try writeMediaHeader(name: name, length: UInt64(data.count), to: writer)
+        try writer.write(data)
+    }
+
+    // MARK: 读
+
+    /// 读出备份清单，等用户确认。新旧两种格式都认
+    static func readPending(url: URL, password: String) throws -> PendingRestore {
+        let head = try readHead(url)
+        if head.starts(with: magic) {
+            let stream = try openStream(url: url, password: password)
+            let file = try readManifest(stream)
+            return PendingRestore(file: file, source: .archive(url, password: password))
+        }
+        guard head.starts(with: legacyMagic) else { throw BackupError.badFormat }
+        let data = try Data(contentsOf: url)
+        return PendingRestore(file: try readLegacy(data, password: password), source: .legacy)
+    }
+
+    /// 把备份里的照片视频放进暂存目录。全部成功后再由 `BackupService.replaceAll` 换上
+    static func stageMedia(for pending: PendingRestore, progress: @escaping (Double) -> Void) throws {
+        let store = MediaStore.shared
+        store.beginStaging()
+        do {
+            switch pending.source {
+            case .legacy:
+                let photos = pending.file.photos
+                var done = 0
+                for (id, data) in photos {
+                    if MediaStore.isValidID(id) {
+                        autoreleasepool {
+                            _ = try? store.importPhoto(data: data, id: id, staging: true)
+                        }
+                    }
+                    done += 1
+                    progress(Double(done) / Double(max(photos.count, 1)))
+                }
+            case .archive(let url, let password):
+                try stageArchive(url: url, password: password, store: store, progress: progress)
+            }
+        } catch {
+            store.discardStaging()
+            throw error
+        }
+    }
+
+    private static func stageArchive(url: URL, password: String, store: MediaStore,
+                                     progress: @escaping (Double) -> Void) throws {
+        let stream = try openStream(url: url, password: password)
+        _ = try readManifest(stream)
+        let total = Double(max(stream.totalSize, 1))
+        while true {
+            guard let tag = try stream.read(1).first else { throw BackupError.badFormat }
+            let length = try stream.readInt(8)
+            if tag == Tag.end.rawValue { break }
+            guard tag == Tag.media.rawValue, length >= 2 else {
+                try skip(length, in: stream)
+                continue
+            }
+            let nameLength = try stream.readInt(2)
+            guard length >= 2 + nameLength else { throw BackupError.badFormat }
+            let name = String(decoding: try stream.read(Int(nameLength)), as: UTF8.self)
+            var remaining = length - 2 - nameLength
+            let parts = name.split(separator: "/").map(String.init)
+            guard parts.count == 2, MediaStore.isValidID(parts[0]) else {
+                try skip(remaining, in: stream)
+                continue
+            }
+            let id = parts[0]
+            switch parts[1] {
+            case "main", "pair":
+                let writer = try store.stagingWriter(id, parts[1] == "main" ? .main : .pair)
+                do {
+                    while remaining > 0 {
+                        let piece = try autoreleasepool {
+                            try stream.read(Int(min(remaining, UInt64(ChunkCipher.defaultChunkSize))))
+                        }
+                        try writer.write(piece)
+                        remaining -= UInt64(piece.count)
+                        progress(min(Double(stream.consumed) / total, 1))
+                    }
+                    try writer.finish()
+                } catch {
+                    writer.abort()
+                    throw error
+                }
+            case "info", "thumb":
+                guard remaining < 64 << 20 else { throw BackupError.badFormat }
+                let data = try stream.read(Int(remaining))
+                try store.stageSealed(data, id: id, part: parts[1] == "info" ? .info : .thumb)
+            default:
+                try skip(remaining, in: stream)
+            }
+        }
+        progress(1)
+    }
+
+    private static func readHead(_ url: URL) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        return try handle.read(upToCount: magic.count + saltSize) ?? Data()
+    }
+
+    private static func openStream(url: URL, password: String) throws -> ChunkStream {
+        let head = try readHead(url)
+        guard head.count == magic.count + saltSize, head.starts(with: magic) else { throw BackupError.badFormat }
+        let salt = Data(head.suffix(saltSize))
+        let key = try BackupCrypto.deriveKey(password: password, salt: salt)
+        let reader = try ChunkReader(url: url, key: key, offset: Int64(magic.count + saltSize))
+        return ChunkStream(reader)
+    }
+
+    private static func readManifest(_ stream: ChunkStream) throws -> BackupFile {
+        let tag: Data
+        do {
+            tag = try stream.read(1)
+        } catch {
+            // 第一块就解不开：密码不对
+            throw BackupError.wrongPassword
+        }
+        guard tag.first == Tag.manifest.rawValue else { throw BackupError.badFormat }
+        let length = try stream.readInt(8)
+        guard length < 256 << 20 else { throw BackupError.badFormat }
+        let compressed = try stream.read(Int(length))
+        guard let json = try? (compressed as NSData).decompressed(using: .lzfse) as Data,
+              let file = try? JSONDecoder().decode(BackupFile.self, from: json) else {
+            throw BackupError.badFormat
+        }
+        return file
+    }
+
+    private static func skip(_ count: UInt64, in stream: ChunkStream) throws {
+        var remaining = count
+        while remaining > 0 {
+            let piece = try stream.read(Int(min(remaining, UInt64(ChunkCipher.defaultChunkSize))))
+            remaining -= UInt64(piece.count)
+        }
+    }
+
+    /// 1 版备份：整份 JSON（照片在里面）压缩后整体加密
+    static func readLegacy(_ data: Data, password: String) throws -> BackupFile {
+        let compressed = try BackupCrypto.decrypt(data, password: password)
+        guard let json = try? (compressed as NSData).decompressed(using: .lzfse) as Data,
+              let file = try? JSONDecoder().decode(BackupFile.self, from: json) else {
+            throw BackupError.badFormat
+        }
+        return file
+    }
+}
+
 // MARK: - 加密
 
 enum BackupCrypto {
     private static let magic = Data("YPBK1".utf8)
     private static let rounds: UInt32 = 200_000
-
-    static func encrypt(_ plain: Data, password: String) throws -> Data {
-        var salt = Data(count: 16)
-        let status = salt.withUnsafeMutableBytes { ptr in
-            SecRandomCopyBytes(kSecRandomDefault, 16, ptr.baseAddress!)
-        }
-        guard status == errSecSuccess else { throw BackupError.crypto }
-        let key = try deriveKey(password: password, salt: salt)
-        let sealed = try AES.GCM.seal(plain, using: key)
-        guard let combined = sealed.combined else { throw BackupError.crypto }
-        return magic + salt + combined
-    }
 
     static func decrypt(_ data: Data, password: String) throws -> Data {
         guard data.count > magic.count + 16, data.prefix(magic.count) == magic else {
@@ -325,7 +592,16 @@ enum BackupCrypto {
         }
     }
 
-    private static func deriveKey(password: String, salt: Data) throws -> SymmetricKey {
+    static func randomBytes(_ count: Int) throws -> Data {
+        var data = Data(count: count)
+        let status = data.withUnsafeMutableBytes { ptr in
+            SecRandomCopyBytes(kSecRandomDefault, count, ptr.baseAddress!)
+        }
+        guard status == errSecSuccess else { throw BackupError.crypto }
+        return data
+    }
+
+    static func deriveKey(password: String, salt: Data) throws -> SymmetricKey {
         let saltBytes = [UInt8](salt)
         var derived = [UInt8](repeating: 0, count: 32)
         let status = CCKeyDerivationPBKDF(
@@ -338,25 +614,5 @@ enum BackupCrypto {
         )
         guard status == Int32(kCCSuccess) else { throw BackupError.crypto }
         return SymmetricKey(data: Data(derived))
-    }
-}
-
-// MARK: - 文件导出用的 Document
-
-struct BackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.data] }
-
-    var data: Data
-
-    init(data: Data) {
-        self.data = data
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        data = configuration.file.regularFileContents ?? Data()
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
     }
 }

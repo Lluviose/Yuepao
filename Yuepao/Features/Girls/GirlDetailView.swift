@@ -213,7 +213,7 @@ struct GirlDetailView: View {
     private var heroBackground: some View {
         ZStack {
             Color(uiColor: .secondarySystemGroupedBackground)
-            if let id = girl.avatarID, let image = PhotoStore.shared.thumbnail(id, size: 240) {
+            if let id = girl.avatarID, let image = MediaStore.shared.thumbnail(id, size: 192) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -674,19 +674,33 @@ struct GirlDetailView: View {
     }
 
     private var photoSection: some View {
-        Section("相册") {
-            PhotoGrid(photoIDs: livePhotoBinding(
+        let own = girl.details.photoIDs.count
+        let fromRecords = girl.encounters.reduce(0) { $0 + $1.details.photoIDs.count }
+        return Section {
+            MediaGrid(ids: storedMediaBinding(
                 get: { girl.details.photoIDs },
                 set: { ids in girl.update { $0.photoIDs = ids } }
-            ), onSetCover: { id in
-                // 复制一份当头像，这样删相册里的照片不会影响头像
-                guard let data = PhotoStore.shared.rawData(id) else { return }
-                let newID = UUID().uuidString
-                guard PhotoStore.shared.importRaw(data, id: newID) else { return }
-                if let old = girl.avatarID { PhotoStore.shared.delete(old) }
-                withAnimation(.snappy) { girl.avatarID = newID }
-                Haptics.success()
+            ), onSetAvatar: { id in
+                // 另存一份当头像，删相册里的原图不影响头像
+                Task { await girl.setAvatar(fromMedia: id) }
             })
+            if fromRecords > 0 {
+                NavigationLink {
+                    AlbumView(girl: girl)
+                } label: {
+                    LabeledContent {
+                        Text("\(own + fromRecords)")
+                            .monospacedDigit()
+                    } label: {
+                        Label("全部照片与视频", systemImage: "photo.stack")
+                    }
+                }
+                .accessibilityIdentifier("openGirlAlbum")
+            }
+        } header: {
+            Text("相册")
+        } footer: {
+            Text("照片、视频、实况都按原画质加密保存。长按可设为头像或存回系统相册。")
         }
     }
 

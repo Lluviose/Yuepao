@@ -116,7 +116,9 @@ struct GirlEditView: View {
                 guard let item else { return }
                 Task {
                     if let data = try? await item.loadTransferable(type: Data.self),
-                       let id = PhotoStore.shared.save(data: data) {
+                       let id = await Task.detached(priority: .userInitiated, operation: {
+                           try? MediaStore.shared.importAvatar(data: data)
+                       }).value {
                         newPhotoIDs.append(id)
                         withAnimation(.snappy(duration: 0.35)) { draft.avatarID = id }
                     }
@@ -226,7 +228,7 @@ struct GirlEditView: View {
         let card = Color(uiColor: .secondarySystemGroupedBackground)
         return ZStack {
             card
-            if let id = draft.avatarID, let image = PhotoStore.shared.thumbnail(id, size: 240) {
+            if let id = draft.avatarID, let image = MediaStore.shared.thumbnail(id, size: 192) {
                 Color.clear
                     .overlay {
                         Image(uiImage: image)
@@ -729,7 +731,7 @@ struct GirlEditView: View {
     }
 
     private func discard() {
-        PhotoStore.shared.delete(newPhotoIDs)
+        MediaStore.shared.delete(newPhotoIDs)
         dismiss()
     }
 
@@ -748,7 +750,7 @@ struct GirlEditView: View {
         let unused = newPhotoIDs.filter { $0 != draft.avatarID }
         var toDelete = unused
         if let old = originalAvatar, old != draft.avatarID { toDelete.append(old) }
-        PhotoStore.shared.delete(toDelete)
+        MediaStore.shared.delete(toDelete)
 
         try? context.save()
         Haptics.success()

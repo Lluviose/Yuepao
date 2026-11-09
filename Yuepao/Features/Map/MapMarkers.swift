@@ -499,7 +499,7 @@ enum MarkerRenderer {
     }
 
     static func drawAvatar(_ avatarID: String?, name: String, in rect: CGRect) {
-        if let avatarID, let photo = PhotoStore.shared.thumbnail(avatarID, size: 160) {
+        if let avatarID, let photo = MediaStore.shared.thumbnail(avatarID, size: 160) {
             let scale = max(rect.width / photo.size.width, rect.height / photo.size.height)
             let w = photo.size.width * scale
             let h = photo.size.height * scale

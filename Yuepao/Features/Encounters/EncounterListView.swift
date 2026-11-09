@@ -339,7 +339,7 @@ struct DateChip: View {
 @MainActor
 enum EncounterActions {
     static func delete(_ encounter: Encounter, context: ModelContext) {
-        PhotoStore.shared.delete(encounter.details.photoIDs)
+        MediaStore.shared.delete(encounter.details.photoIDs)
         Reminders.cancelRisk(encounterID: encounter.id)
         context.delete(encounter)
         try? context.save()

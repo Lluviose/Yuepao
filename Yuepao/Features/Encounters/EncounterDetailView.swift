@@ -10,6 +10,7 @@ struct EncounterDetailView: View {
     @State private var editing = false
     @State private var repeating = false
     @State private var confirmDelete = false
+    @State private var addingMedia = false
 
     var body: some View {
         let d = encounter.details
@@ -18,6 +19,7 @@ struct EncounterDetailView: View {
                 hero(d)
                 riskCards(d)
                 metricsCard(d)
+                photoCard(d)
                 whereCard
                 peopleCard
                 playCard(d)
@@ -26,7 +28,6 @@ struct EncounterDetailView: View {
                 dateCard(d)
                 costCard(d)
                 noteCard(d)
-                photoCard
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -143,13 +144,14 @@ struct EncounterDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
-    /// 她有头像就用模糊的照片做底，没有就用她的头像色调
+    /// 这次拍了照片就用第一张模糊后做底，没有就用她的头像，再没有用她的头像色调
     private var heroBackground: some View {
         let card = Color(uiColor: .secondarySystemGroupedBackground)
         let first = encounter.girls.first
+        let backdrop = encounter.details.photoIDs.first ?? first?.avatarID
         return ZStack {
             card
-            if let id = first?.avatarID, let image = PhotoStore.shared.thumbnail(id, size: 240) {
+            if let id = backdrop, let image = MediaStore.shared.thumbnail(id, size: 192) {
                 Color.clear
                     .overlay {
                         Image(uiImage: image)
@@ -440,12 +442,24 @@ struct EncounterDetailView: View {
         }
     }
 
-    private var photoCard: some View {
-        RecordCard("照片") {
-            PhotoGrid(photoIDs: livePhotoBinding(
+    /// 照片和视频放在前面：一张大图 + 小图拼起来，点开全屏看原图、播视频、看实况
+    private func photoCard(_ d: EncounterDetails) -> some View {
+        RecordCard("照片与视频", trailing: {
+            if !d.photoIDs.isEmpty {
+                Button {
+                    addingMedia = true
+                } label: {
+                    Label("添加", systemImage: "plus")
+                        .font(.footnote.weight(.medium))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("addMediaHeader")
+            }
+        }) {
+            MediaGrid(ids: storedMediaBinding(
                 get: { encounter.details.photoIDs },
                 set: { ids in encounter.update { $0.photoIDs = ids } }
-            ))
+            ), style: .mosaic, pickerPresented: $addingMedia)
         }
     }
 }

@@ -47,6 +47,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSFaceIDUsageDescription: 用于解锁应用，保护你的私密数据
         NSLocationWhenInUseUsageDescription: 用于在地图上显示你的位置、选择地点
+        NSPhotoLibraryAddUsageDescription: 只在你点「存到系统相册」时，把这张照片或视频的原文件存回系统相册
 
   YuepaoUITests:
     type: bundle.ui-testing

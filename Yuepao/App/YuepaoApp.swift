@@ -8,6 +8,8 @@ struct YuepaoApp: App {
     init() {
         Self.configureNavigationBar()
         container = Persistence.makeContainer()
+        // 上次播放视频、导入、打包备份留下的明文临时文件
+        MediaStore.shared.purgeTemporary()
         DataMigrations.run(container.mainContext)
         TestSupport.seedIfNeeded(container.mainContext)
     }

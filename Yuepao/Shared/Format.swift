@@ -67,6 +67,22 @@ enum Fmt {
         return String(format: "¥%.2f", v)
     }
 
+    /// 文件大小：3.1 MB
+    static func bytes(_ count: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+    }
+
+    /// 视频时长：0:07、12:34、1:02:03
+    static func clock(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "0:00" }
+        let total = Int(seconds.rounded(.down))
+        let h = total / 3600
+        let m = total % 3600 / 60
+        let s = total % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%d:%02d", m, s)
+    }
+
     static func age(_ birthday: Date?) -> Int? {
         guard let birthday else { return nil }
         return Calendar.current.dateComponents([.year], from: birthday, to: Date()).year

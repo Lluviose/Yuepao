@@ -9,6 +9,8 @@ struct AvatarView: View {
     var size: CGFloat = 44
     var ring: Color?
 
+    @Environment(\.displayScale) private var displayScale
+
     var body: some View {
         content
             .frame(width: size, height: size)
@@ -23,17 +25,54 @@ struct AvatarView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let photoID, let image = PhotoStore.shared.thumbnail(photoID) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
+        if let photoID {
+            AvatarPhoto(id: photoID, pixels: size * max(displayScale, 2)) { placeholder }
+                .id(photoID)
         } else {
-            ZStack {
-                Circle().fill(Palette.avatarGradient(for: name))
-                Text(String(name.prefix(1)))
-                    .font(.system(size: size * 0.4, weight: .medium, design: .serif))
-                    .foregroundStyle(Color.white.opacity(0.95))
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Circle().fill(Palette.avatarGradient(for: name))
+            Text(String(name.prefix(1)))
+                .font(.system(size: size * 0.4, weight: .medium, design: .serif))
+                .foregroundStyle(Color.white.opacity(0.95))
+        }
+    }
+}
+
+/// 头像照片：先查缓存，没有再到后台解出缩略图，不卡列表
+private struct AvatarPhoto<Placeholder: View>: View {
+    let id: String
+    let pixels: CGFloat
+    let placeholder: Placeholder
+
+    @State private var image: UIImage?
+
+    init(id: String, pixels: CGFloat, @ViewBuilder placeholder: () -> Placeholder) {
+        self.id = id
+        self.pixels = pixels
+        self.placeholder = placeholder()
+        _image = State(initialValue: MediaStore.shared.cachedThumbnail(id, size: pixels))
+    }
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            } else {
+                placeholder
             }
+        }
+        .task(id: id) {
+            guard image == nil else { return }
+            let loaded = await MediaStore.shared.loadThumbnail(id, size: pixels)
+            withAnimation(.easeOut(duration: 0.2)) { image = loaded }
         }
     }
 }
@@ -153,182 +192,6 @@ struct StarDisplay: View {
             }
         }
     }
-}
-
-// MARK: - 照片
-
-struct PhotoGrid: View {
-    @Binding var photoIDs: [String]
-    var columns: Int = 4
-    /// 提供时，长按照片可以「设为头像」
-    var onSetCover: ((String) -> Void)?
-
-    @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var viewer: PhotoViewerTarget?
-    @State private var importing = false
-
-    var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: columns), spacing: 6) {
-            ForEach(Array(photoIDs.enumerated()), id: \.element) { index, id in
-                PhotoThumb(id: id)
-                    .onTapGesture { viewer = PhotoViewerTarget(index: index) }
-                    .contextMenu {
-                        if let onSetCover {
-                            Button {
-                                onSetCover(id)
-                            } label: {
-                                Label("设为头像", systemImage: "person.crop.circle")
-                            }
-                        }
-                        Button(role: .destructive) {
-                            withAnimation(.snappy) { photoIDs.removeAll { $0 == id } }
-                        } label: {
-                            Label("删除", systemImage: "trash")
-                        }
-                    }
-            }
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: 20, matching: .images) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.12))
-                    if importing {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "plus").font(.title3).foregroundStyle(.secondary)
-                    }
-                }
-                .aspectRatio(1, contentMode: .fit)
-            }
-            .buttonStyle(.borderless)
-        }
-        .padding(.vertical, 4)
-        .onChange(of: pickerItems) { _, items in
-            guard !items.isEmpty else { return }
-            importing = true
-            Task {
-                var added: [String] = []
-                for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let id = PhotoStore.shared.save(data: data) {
-                        added.append(id)
-                    }
-                }
-                photoIDs.append(contentsOf: added)
-                pickerItems = []
-                importing = false
-            }
-        }
-        .fullScreenCover(item: $viewer) { target in
-            PhotoViewer(photoIDs: $photoIDs, startIndex: target.index)
-        }
-    }
-}
-
-struct PhotoViewerTarget: Identifiable {
-    let index: Int
-    var id: Int { index }
-}
-
-struct PhotoThumb: View {
-    let id: String
-
-    var body: some View {
-        Color.secondary.opacity(0.12)
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                if let image = PhotoStore.shared.thumbnail(id) {
-                    Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    Image(systemName: "photo").foregroundStyle(.secondary)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())
-    }
-}
-
-/// 全屏看图。删除只从列表移除，真正删文件由调用方决定。
-struct PhotoViewer: View {
-    @Binding var photoIDs: [String]
-    let startIndex: Int
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var selection: Int
-    @State private var confirmDelete = false
-
-    init(photoIDs: Binding<[String]>, startIndex: Int) {
-        _photoIDs = photoIDs
-        self.startIndex = startIndex
-        _selection = State(initialValue: startIndex)
-    }
-
-    var body: some View {
-        NavigationStack {
-            TabView(selection: $selection) {
-                ForEach(Array(photoIDs.enumerated()), id: \.element) { index, id in
-                    FullImage(id: id).tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
-            .background(Color.black)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                }
-                ToolbarItem(placement: .destructiveAction) {
-                    Button(role: .destructive) {
-                        confirmDelete = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                }
-            }
-            .toolbarBackground(.visible, for: .navigationBar)
-            .confirmationDialog("删除这张照片？", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("删除", role: .destructive) { deleteCurrent() }
-            }
-        }
-    }
-
-    private func deleteCurrent() {
-        guard photoIDs.indices.contains(selection) else { return }
-        photoIDs.remove(at: selection)
-        if photoIDs.isEmpty {
-            dismiss()
-        } else {
-            selection = min(selection, photoIDs.count - 1)
-        }
-    }
-}
-
-private struct FullImage: View {
-    let id: String
-    @State private var image: UIImage?
-
-    var body: some View {
-        ZStack {
-            Color.black
-            if let image {
-                Image(uiImage: image).resizable().scaledToFit()
-            } else {
-                ProgressView().tint(.white)
-            }
-        }
-        .task(id: id) {
-            image = PhotoStore.shared.image(id)
-        }
-    }
-}
-
-/// 绑定到已保存模型上的照片列表时用：被移除的照片顺手删掉文件
-func livePhotoBinding(get: @escaping () -> [String], set: @escaping ([String]) -> Void) -> Binding<[String]> {
-    Binding(
-        get: get,
-        set: { newValue in
-            let removed = Set(get()).subtracting(newValue)
-            PhotoStore.shared.delete(Array(removed))
-            set(newValue)
-        }
-    )
 }
 
 // MARK: - 空状态 / 信息行

@@ -19,16 +19,23 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var exportSheet = false
-    @State private var exportDocument: BackupDocument?
+    @State private var exportURL: URL?
     @State private var exporting = false
     @State private var importing = false
-    @State private var importData: Data?
+    @State private var importURL: URL?
     @State private var importPassword = ""
     @State private var askImportPassword = false
-    @State private var pendingRestore: BackupFile?
+    @State private var pendingRestore: PendingRestore?
     @State private var message: String?
     @State private var confirmWipe = false
     @State private var confirmWipeAgain = false
+    /// 正在打包 / 恢复时的提示和进度
+    @State private var working: String?
+    @State private var workProgress: Double = 0
+    @State private var mediaUsage: MediaUsage?
+    @State private var orphans: [String] = []
+    @State private var orphanBytes: Int64 = 0
+    @State private var confirmCleanup = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +44,7 @@ struct SettingsView: View {
                 appearanceSection
                 notificationSection
                 customizeSection
+                mediaSection
                 dataSection
                 aboutSection
             }
@@ -48,17 +56,21 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $exportSheet) {
-                BackupPasswordSheet { password in
-                    makeBackup(password: password)
+                BackupPasswordSheet(usage: mediaUsage) { password, includeVideos in
+                    makeBackup(password: password, includeVideos: includeVideos)
                 }
             }
-            .fileExporter(isPresented: $exporting, document: exportDocument, contentType: .data,
-                          defaultFilename: BackupService.defaultFilename) { result in
+            .fileMover(isPresented: $exporting, file: exportURL) { result in
                 switch result {
-                case .success: message = "备份已保存。请记住密码，忘了就打不开。"
-                case .failure(let error): message = "保存失败：\(error.localizedDescription)"
+                case .success:
+                    message = "备份已保存。请记住密码，忘了就打不开。"
+                case .failure(let error):
+                    if (error as? CocoaError)?.code != .userCancelled {
+                        message = "保存失败：\(error.localizedDescription)"
+                    }
                 }
-                exportDocument = nil
+                if let exportURL { try? FileManager.default.removeItem(at: exportURL.deletingLastPathComponent()) }
+                exportURL = nil
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.data, .item]) { result in
                 handleImport(result)
@@ -66,7 +78,7 @@ struct SettingsView: View {
             .alert("输入备份密码", isPresented: $askImportPassword) {
                 SecureField("密码", text: $importPassword)
                 Button("取消", role: .cancel) {
-                    importData = nil
+                    importURL = nil
                     importPassword = ""
                 }
                 Button("解密") { decryptImport() }
@@ -97,7 +109,21 @@ struct SettingsView: View {
                 Button("取消", role: .cancel) {}
                 Button("确认清空", role: .destructive) { wipe() }
             }
+            .confirmationDialog("删除没用到的文件？", isPresented: $confirmCleanup, titleVisibility: .visible) {
+                Button("删除 \(orphans.count) 个文件", role: .destructive) { cleanOrphans() }
+            } message: {
+                Text("这些照片视频没有被任何档案或记录用到（比如中途放弃的记录里加过的）。")
+            }
+            .overlay {
+                if let working {
+                    WorkingOverlay(title: working, progress: workProgress)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: working)
+            .task { await loadUsage() }
         }
+        .interactiveDismissDisabled(working != nil)
     }
 
     // MARK: Sections
@@ -194,6 +220,35 @@ struct SettingsView: View {
         }
     }
 
+    private var mediaSection: some View {
+        Section {
+            if let usage = mediaUsage {
+                LabeledContent("已保存", value: usage.count == 0 ? "无" : "\(usage.count) 项")
+                if usage.count > 0 {
+                    LabeledContent("照片 / 实况 / 视频", value: "\(usage.photos) / \(usage.lives) / \(usage.videos)")
+                    LabeledContent("占用空间", value: Fmt.bytes(usage.bytes))
+                }
+                if !orphans.isEmpty {
+                    Button {
+                        confirmCleanup = true
+                    } label: {
+                        Label("清理 \(orphans.count) 个没用到的文件（\(Fmt.bytes(orphanBytes))）", systemImage: "sparkles")
+                    }
+                }
+            } else {
+                HStack {
+                    Text("正在统计…").foregroundStyle(.secondary)
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        } header: {
+            Text("照片与视频")
+        } footer: {
+            Text("照片、视频、实况都按原文件保存，不压缩、不转码；加密后只放在这台手机上，不进系统相册。更新前存的照片是压缩过的版本。")
+        }
+    }
+
     private var dataSection: some View {
         Section {
             Button {
@@ -229,17 +284,41 @@ struct SettingsView: View {
     }
 
     private var restoreSummary: String {
-        guard let file = pendingRestore else { return "" }
-        return "备份时间：\(Fmt.dateTime(file.exportedAt))\n包含 \(file.girls.count) 个档案、\(file.encounters.count) 条记录、\(file.todos?.count ?? 0) 条待办、\(file.places.count) 个地点、\(file.photos.count) 张照片。\n当前 App 里的数据会被全部替换。"
+        guard let file = pendingRestore?.file else { return "" }
+        return "备份时间：\(Fmt.dateTime(file.exportedAt))\n包含 \(file.girls.count) 个档案、\(file.encounters.count) 条记录、\(file.todos?.count ?? 0) 条待办、\(file.places.count) 个地点、\(file.mediaTotal) 个照片视频。\n当前 App 里的数据会被全部替换。"
     }
 
     // MARK: Actions
 
-    private func makeBackup(password: String) {
+    private func makeBackup(password: String, includeVideos: Bool) {
         do {
-            let data = try BackupService.makeBackup(context: context, password: password)
-            exportDocument = BackupDocument(data: data)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { exporting = true }
+            var manifest = try BackupService.makeManifest(context: context)
+            var ids = Array(BackupService.referencedMediaIDs(context: context)).sorted()
+            if !includeVideos {
+                let videos = Set(ids.filter { MediaStore.shared.kind($0) == .video })
+                ids.removeAll { videos.contains($0) }
+                manifest = manifest.removingMedia(videos)
+            }
+            manifest.mediaCount = ids.count
+            let file = manifest
+            let mediaIDs = ids
+            let filename = BackupService.defaultFilename
+            let report = reportProgress
+            startWork("正在打包备份…")
+            Task {
+                do {
+                    let url = try await Task.detached(priority: .userInitiated) {
+                        try BackupArchive.write(manifest: file, mediaIDs: mediaIDs, password: password,
+                                                filename: filename, progress: report)
+                    }.value
+                    working = nil
+                    exportURL = url
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { exporting = true }
+                } catch {
+                    working = nil
+                    message = "备份失败：\(error.localizedDescription)"
+                }
+            }
         } catch {
             message = "备份失败：\(error.localizedDescription)"
         }
@@ -248,52 +327,110 @@ struct SettingsView: View {
     private func handleImport(_ result: Result<URL, Error>) {
         switch result {
         case .success(let url):
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            do {
-                importData = try Data(contentsOf: url)
-                importPassword = ""
-                askImportPassword = true
-            } catch {
-                message = "读取文件失败：\(error.localizedDescription)"
-            }
+            importURL = url
+            importPassword = ""
+            askImportPassword = true
         case .failure(let error):
             message = "读取文件失败：\(error.localizedDescription)"
         }
     }
 
     private func decryptImport() {
-        guard let data = importData else { return }
+        guard let url = importURL else { return }
         let password = importPassword
-        importData = nil
         importPassword = ""
-        do {
-            pendingRestore = try BackupService.readBackup(data, password: password)
-        } catch {
-            message = error.localizedDescription
+        startWork("正在解密…")
+        Task {
+            do {
+                let pending = try await Task.detached(priority: .userInitiated) { () throws -> PendingRestore in
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    return try BackupArchive.readPending(url: url, password: password)
+                }.value
+                working = nil
+                pendingRestore = pending
+            } catch {
+                working = nil
+                importURL = nil
+                message = error.localizedDescription
+            }
         }
     }
 
     private func restore() {
-        guard let file = pendingRestore else { return }
+        guard let pending = pendingRestore else { return }
         pendingRestore = nil
-        do {
-            try BackupService.restore(file, context: context)
-            let all = (try? context.fetch(FetchDescriptor<Girl>())) ?? []
-            Reminders.rescheduleDates(girls: all)
-            for todo in (try? context.fetch(FetchDescriptor<TodoItem>())) ?? [] {
-                Reminders.scheduleTodo(todo, girlName: all.first { $0.id == todo.girlID }?.name)
+        let url = importURL
+        let report = reportProgress
+        startWork("正在恢复照片和视频…")
+        Task {
+            do {
+                // 先把照片视频读到暂存目录，全部成功再替换，中途失败不影响现在的数据
+                try await Task.detached(priority: .userInitiated) { () throws -> Void in
+                    let access = url?.startAccessingSecurityScopedResource() ?? false
+                    defer { if access { url?.stopAccessingSecurityScopedResource() } }
+                    try BackupArchive.stageMedia(for: pending, progress: report)
+                }.value
+                try BackupService.replaceAll(with: pending.file, context: context)
+                let all = (try? context.fetch(FetchDescriptor<Girl>())) ?? []
+                Reminders.rescheduleDates(girls: all)
+                for todo in (try? context.fetch(FetchDescriptor<TodoItem>())) ?? [] {
+                    Reminders.scheduleTodo(todo, girlName: all.first { $0.id == todo.girlID }?.name)
+                }
+                working = nil
+                importURL = nil
+                message = "恢复完成"
+                await loadUsage()
+            } catch {
+                MediaStore.shared.discardStaging()
+                working = nil
+                importURL = nil
+                message = "恢复失败：\(error.localizedDescription)"
             }
-            message = "恢复完成"
-        } catch {
-            message = "恢复失败：\(error.localizedDescription)"
         }
+    }
+
+    private func startWork(_ title: String) {
+        workProgress = 0
+        working = title
+    }
+
+    /// 后台线程里报进度
+    private var reportProgress: @Sendable (Double) -> Void {
+        { value in
+            Task { @MainActor in workProgress = value }
+        }
+    }
+
+    private func loadUsage() async {
+        let referenced = BackupService.referencedMediaIDs(context: context)
+        let result = await Task.detached(priority: .utility) { () -> (MediaUsage, [String], Int64) in
+            let store = MediaStore.shared
+            let all = store.allIDs()
+            let used = all.filter { referenced.contains($0) }
+            let unused = all.filter { !referenced.contains($0) }
+            let unusedBytes = unused.reduce(Int64(0)) { $0 + store.diskSize($1) }
+            return (store.usage(of: used), unused, unusedBytes)
+        }.value
+        mediaUsage = result.0
+        orphans = result.1
+        orphanBytes = result.2
+    }
+
+    private func cleanOrphans() {
+        // 再核对一遍，确保只删没被引用的
+        let referenced = BackupService.referencedMediaIDs(context: context)
+        MediaStore.shared.delete(orphans.filter { !referenced.contains($0) })
+        orphans = []
+        orphanBytes = 0
+        Task { await loadUsage() }
     }
 
     private func wipe() {
         do {
             try BackupService.wipeAll(context: context)
             Reminders.removeAll()
+            Task { await loadUsage() }
             message = "已清空"
         } catch {
             message = "清空失败：\(error.localizedDescription)"
@@ -302,11 +439,13 @@ struct SettingsView: View {
 }
 
 struct BackupPasswordSheet: View {
-    let onConfirm: (String) -> Void
+    var usage: MediaUsage?
+    let onConfirm: (String, Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var password = ""
     @State private var confirm = ""
+    @State private var includeVideos = true
 
     private var valid: Bool { password.count >= 4 && password == confirm }
 
@@ -319,6 +458,23 @@ struct BackupPasswordSheet: View {
                 } footer: {
                     Text("备份文件用这个密码加密（AES-256）。忘记密码将无法恢复，App 也不会保存这个密码。")
                 }
+                if let usage, usage.count > 0 {
+                    Section {
+                        LabeledContent("照片与实况", value: Fmt.bytes(max(usage.bytes - usage.videoBytes, 0)))
+                        if usage.videos > 0 {
+                            Toggle(isOn: $includeVideos) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("包含视频")
+                                    Text("\(usage.videos) 个 · \(Fmt.bytes(usage.videoBytes))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } footer: {
+                        Text("照片视频都是原文件，备份大小约为 \(Fmt.bytes(includeVideos ? usage.bytes : usage.bytes - usage.videoBytes))。")
+                    }
+                }
             }
             .navigationTitle("设置备份密码")
             .navigationBarTitleDisplayMode(.inline)
@@ -327,14 +483,43 @@ struct BackupPasswordSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("导出") {
                         let pw = password
+                        let videos = includeVideos
                         dismiss()
-                        onConfirm(pw)
+                        onConfirm(pw, videos)
                     }
                     .disabled(!valid)
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
+    }
+}
+
+/// 打包 / 恢复时盖在页面上的进度
+private struct WorkingOverlay: View {
+    let title: String
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.25).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(Palette.gold)
+                    .frame(width: 190)
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                Text("\(Int((progress * 100).rounded()))%")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.regularMaterial))
+        }
     }
 }
 
