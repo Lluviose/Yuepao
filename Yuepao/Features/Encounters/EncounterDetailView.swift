@@ -71,11 +71,13 @@ struct EncounterDetailView: View {
                 HStack {
                     Text("措施")
                     Spacer()
-                    Image(systemName: encounter.protection.symbol)
-                        .font(.subheadline)
-                    Text(encounter.protection.title)
+                    Group {
+                        Image(systemName: encounter.protection.symbol)
+                            .font(.subheadline)
+                        Text(encounter.protection.title)
+                    }
+                    .foregroundStyle(encounter.protection.color)
                 }
-                .foregroundStyle(encounter.protection.color)
                 if encounter.condomBroke { InfoRow(label: "破套", value: "是") }
                 if encounter.pregnancyRisk {
                     InfoRow(label: "紧急避孕药", value: d.pillTaken ? "已吃" : "未记录")
