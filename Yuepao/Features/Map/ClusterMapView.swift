@@ -100,6 +100,8 @@ struct ClusterMapView: UIViewRepresentable {
         private var didInitialFit = false
         /// 数据刚变过：这段时间里新出现的标记做入场动画
         private var animateUntil: CFTimeInterval = 0
+        /// 这一轮新加的标记（只有它们和包含它们的聚合做入场动画）
+        private var freshKeys = Set<ObjectIdentifier>()
         private var lastUserCoordinate: CLLocationCoordinate2D?
         private var pendingSelect: MKAnnotation?
         /// 由卡片滑动触发的选中，didSelect 时不再回传给 SwiftUI
@@ -194,7 +196,18 @@ struct ClusterMapView: UIViewRepresentable {
             if !toRemove.isEmpty { map.removeAnnotations(toRemove) }
             if !toAdd.isEmpty {
                 animateUntil = CACurrentMediaTime() + 0.8
-                map.addAnnotations(toAdd)
+                freshKeys = Set(toAdd.map { ObjectIdentifier($0) })
+                if didInitialFit {
+                    // MapKit 只在整批加入（或缩放）时重新计算聚合，一个个加进来的不会和已有的合并。
+                    // 所以把已有的也一起重新加一遍，回放时同一座城市的点才会合在一起。
+                    let kept: [MKAnnotation] = people.values.map { $0 as MKAnnotation } + spots.values.map { $0 as MKAnnotation }
+                    let existing = kept.filter { a in !freshKeys.contains(ObjectIdentifier(a)) }
+                    map.removeAnnotations(existing)
+                    map.addAnnotations(existing + toAdd)
+                    restoreSelection(map)
+                } else {
+                    map.addAnnotations(toAdd)
+                }
             }
             if visualsChanged { refreshClusters(pulse: pulsed) }
             for a in pulsed {
@@ -206,6 +219,16 @@ struct ClusterMapView: UIViewRepresentable {
                 DispatchQueue.main.async { [weak self] in
                     self?.fitAll(animated: false)
                 }
+            }
+        }
+
+        /// 重新加入标记后，把选中状态补回来
+        private func restoreSelection(_ map: MKMapView) {
+            guard let focus = appliedFocus, let annotation = annotation(for: focus) else { return }
+            DispatchQueue.main.async { [weak self, weak map] in
+                guard let self, let map, map.view(for: annotation) != nil else { return }
+                self.programmaticFocus = focus
+                self.select(annotation, in: map)
             }
         }
 
@@ -466,9 +489,18 @@ struct ClusterMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
             guard CACurrentMediaTime() < animateUntil else { return }
-            for (index, view) in views.enumerated() {
-                guard let marker = view as? MarkerView else { continue }
-                marker.appear(delay: min(Double(index) * 0.03, 0.3), alpha: marker.alpha)
+            var order = 0
+            for view in views {
+                guard let marker = view as? MarkerView, let annotation = view.annotation else { continue }
+                let isFresh: Bool
+                if let cluster = annotation as? MKClusterAnnotation {
+                    isFresh = cluster.memberAnnotations.contains { freshKeys.contains(ObjectIdentifier($0)) }
+                } else {
+                    isFresh = freshKeys.contains(ObjectIdentifier(annotation))
+                }
+                guard isFresh else { continue }
+                marker.appear(delay: min(Double(order) * 0.03, 0.3), alpha: marker.alpha)
+                order += 1
             }
         }
 

@@ -401,6 +401,14 @@ struct DraftPlaceCard: View {
     let onCancel: () -> Void
     let onCreate: () -> Void
 
+    /// 地址和名字一样时（比如只解析到省份），改显示坐标
+    private var subtitle: String {
+        if !draft.address.isEmpty && draft.address != draft.name { return draft.address }
+        let area = [draft.city, draft.district].filter { !$0.isEmpty && $0 != draft.name }.joined(separator: " ")
+        if !area.isEmpty { return area }
+        return String(format: "%.4f, %.4f", draft.latitude, draft.longitude)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "mappin.and.ellipse")
@@ -412,13 +420,7 @@ struct DraftPlaceCard: View {
                 Text(draft.name.isEmpty ? "这里" : draft.name)
                     .font(Typo.display(18))
                     .lineLimit(1)
-                Group {
-                    if draft.resolved {
-                        Text(draft.address.isEmpty ? "未知地址" : draft.address)
-                    } else {
-                        Text("正在获取地址…")
-                    }
-                }
+                Text(draft.resolved ? subtitle : "正在获取地址…")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
