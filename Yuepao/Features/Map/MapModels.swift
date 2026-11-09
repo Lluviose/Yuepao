@@ -107,6 +107,8 @@ struct MapPerson: Identifiable, Equatable {
     let longitude: Double
     let tone: UIColor
     let avatarID: String?
+    /// 回放时还没到她出现的时间：标记留在地图上但隐藏，聚合才能保持正确
+    var active = true
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -120,6 +122,8 @@ struct MapSpot: Identifiable, Equatable {
     let latitude: Double
     let longitude: Double
     let count: Int
+    /// 回放时还没去过：隐藏
+    var active = true
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -147,10 +151,12 @@ struct MapContent {
     var heat: [HeatPoint] = []
     var stats = MapStats()
 
-    var isEmpty: Bool { people.isEmpty && spots.isEmpty && heat.isEmpty }
+    var isEmpty: Bool {
+        !people.contains { $0.active } && !spots.contains { $0.active } && heat.isEmpty
+    }
 
     var focuses: [MapFocus] {
-        people.map { MapFocus.girl($0.id) } + spots.map { MapFocus.place($0.id) }
+        people.filter(\.active).map { MapFocus.girl($0.id) } + spots.filter(\.active).map { MapFocus.place($0.id) }
     }
 
     func coordinate(of focus: MapFocus) -> CLLocationCoordinate2D? {
@@ -227,39 +233,53 @@ struct MapSnapshot {
         }
     }
 
-    /// 截至 `cutoff`（nil 表示全部）时地图上的内容
+    /// 截至 `cutoff`（nil 表示全部）时地图上的内容。
+    /// 回放时所有标记都保留，只是把还没到时间的标成 inactive（隐藏），
+    /// 这样回放过程中不增删标记，MapKit 的聚合一直是对的。
     func content(mode: MapMode, until cutoff: Date? = nil) -> MapContent {
         var result = MapContent()
-        let shownPeople = people.filter { cutoff == nil || $0.since <= cutoff! }
-
+        var peopleItems: [MapPerson] = []
         var spotItems: [MapSpot] = []
+        var activeSpots: [MapSpot] = []
         var links = Set<MapLink>()
         var cities = Set<String>()
+        var activePeople = 0
         var total = 0
+
+        for p in people {
+            var item = p.person
+            item.active = cutoff.map { p.since <= $0 } ?? true
+            if item.active {
+                activePeople += 1
+                if !p.city.isEmpty { cities.insert(p.city) }
+            }
+            peopleItems.append(item)
+        }
         for s in spots {
             let visits = cutoff.map { c in s.visits.filter { $0.date <= c } } ?? s.visits
-            guard !visits.isEmpty else { continue }
-            spotItems.append(MapSpot(id: s.id, name: s.name, type: s.type, latitude: s.latitude,
-                                     longitude: s.longitude, count: visits.count))
+            let spot = MapSpot(id: s.id, name: s.name, type: s.type, latitude: s.latitude,
+                               longitude: s.longitude, count: visits.count, active: !visits.isEmpty)
+            spotItems.append(spot)
+            guard spot.active else { continue }
+            activeSpots.append(spot)
             for v in visits {
                 for g in v.girlIDs { links.insert(MapLink(girl: g, place: s.id)) }
             }
             total += visits.count
             if !s.city.isEmpty { cities.insert(s.city) }
         }
-        for p in shownPeople where !p.city.isEmpty { cities.insert(p.city) }
 
-        if mode.showsPeople { result.people = shownPeople.map(\.person) }
+        if mode.showsPeople { result.people = peopleItems }
         if mode.showsSpots { result.spots = spotItems }
         if mode == .heat {
-            let maxCount = Double(spotItems.map(\.count).max() ?? 1)
-            result.heat = spotItems.map {
+            let maxCount = Double(activeSpots.map(\.count).max() ?? 1)
+            result.heat = activeSpots.map {
                 HeatPoint(latitude: $0.latitude, longitude: $0.longitude,
                           weight: (Double($0.count) / max(maxCount, 1)).squareRoot())
             }
         }
         result.links = Array(links)
-        result.stats = MapStats(people: shownPeople.count, spots: spotItems.count, encounters: total, cities: cities.count)
+        result.stats = MapStats(people: activePeople, spots: activeSpots.count, encounters: total, cities: cities.count)
         return result
     }
 }

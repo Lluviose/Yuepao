@@ -102,6 +102,7 @@ struct ClusterMapView: UIViewRepresentable {
         private var animateUntil: CFTimeInterval = 0
         /// 这一轮新加的标记（只有它们和包含它们的聚合做入场动画）
         private var freshKeys = Set<ObjectIdentifier>()
+        private var reclusterScheduled = false
         private var lastUserCoordinate: CLLocationCoordinate2D?
         private var pendingSelect: MKAnnotation?
         /// 由卡片滑动触发的选中，didSelect 时不再回传给 SwiftUI
@@ -139,6 +140,7 @@ struct ClusterMapView: UIViewRepresentable {
             var toRemove: [MKAnnotation] = []
             var toAdd: [MKAnnotation] = []
             var pulsed: [MKAnnotation] = []
+            var appeared: [MKAnnotation] = []
             var visualsChanged = false
 
             let newPeople = Dictionary(parent.content.people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -155,8 +157,10 @@ struct ClusterMapView: UIViewRepresentable {
                         people[item.id] = fresh
                         toAdd.append(fresh)
                     } else {
+                        let activated = item.active && !existing.item.active
                         existing.item = item
                         (map.view(for: existing) as? MarkerView)?.configure()
+                        if activated { appeared.append(existing) }
                         visualsChanged = true
                     }
                 } else {
@@ -180,10 +184,15 @@ struct ClusterMapView: UIViewRepresentable {
                         spots[item.id] = fresh
                         toAdd.append(fresh)
                     } else {
+                        let activated = item.active && !existing.item.active
                         let grew = item.count > existing.item.count
                         existing.item = item
                         (map.view(for: existing) as? MarkerView)?.configure()
-                        if grew { pulsed.append(existing) }
+                        if activated {
+                            appeared.append(existing)
+                        } else if grew {
+                            pulsed.append(existing)
+                        }
                         visualsChanged = true
                     }
                 } else {
@@ -197,21 +206,16 @@ struct ClusterMapView: UIViewRepresentable {
             if !toAdd.isEmpty {
                 animateUntil = CACurrentMediaTime() + 0.8
                 freshKeys = Set(toAdd.map { ObjectIdentifier($0) })
-                if didInitialFit {
-                    // MapKit 只在整批加入（或缩放）时重新计算聚合，一个个加进来的不会和已有的合并。
-                    // 所以把已有的也一起重新加一遍，回放时同一座城市的点才会合在一起。
-                    let kept: [MKAnnotation] = people.values.map { $0 as MKAnnotation } + spots.values.map { $0 as MKAnnotation }
-                    let existing = kept.filter { a in !freshKeys.contains(ObjectIdentifier(a)) }
-                    map.removeAnnotations(existing)
-                    map.addAnnotations(existing + toAdd)
-                    restoreSelection(map)
-                } else {
-                    map.addAnnotations(toAdd)
-                }
+                map.addAnnotations(toAdd)
+                if didInitialFit { scheduleRecluster(map) }
             }
-            if visualsChanged { refreshClusters(pulse: pulsed) }
+            if visualsChanged { refreshClusters(pulse: pulsed + appeared) }
             for a in pulsed {
                 (map.view(for: a) as? MarkerView)?.pulse()
+            }
+            for a in appeared {
+                guard let view = map.view(for: a) as? MarkerView else { continue }
+                view.appear(delay: 0, alpha: view.alpha)
             }
 
             if !didInitialFit, !toAdd.isEmpty || !parent.content.heat.isEmpty {
@@ -222,13 +226,17 @@ struct ClusterMapView: UIViewRepresentable {
             }
         }
 
-        /// 重新加入标记后，把选中状态补回来
-        private func restoreSelection(_ map: MKMapView) {
-            guard let focus = appliedFocus, let annotation = annotation(for: focus) else { return }
-            DispatchQueue.main.async { [weak self, weak map] in
-                guard let self, let map, map.view(for: annotation) != nil else { return }
-                self.programmaticFocus = focus
-                self.select(annotation, in: map)
+        /// MapKit 只在镜头变化时重新计算聚合，后加进来的标记不会和已有的合并。
+        /// 等新标记的视图建好后，把镜头缩放千分之一（肉眼看不出），让它重新算一遍。
+        private func scheduleRecluster(_ map: MKMapView) {
+            guard !reclusterScheduled else { return }
+            reclusterScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak map] in
+                guard let self, let map else { return }
+                self.reclusterScheduled = false
+                let rect = map.visibleMapRect
+                map.setVisibleMapRect(rect.insetBy(dx: -rect.size.width * 0.0005, dy: -rect.size.height * 0.0005),
+                                      animated: false)
             }
         }
 

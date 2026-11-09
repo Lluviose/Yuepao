@@ -76,6 +76,13 @@ class MarkerView: MKAnnotationView {
     /// 子类在这里画图
     func configure() {}
 
+    /// 回放时还没出现的标记：视图留着（参与聚合），只是看不见、点不到
+    func setActive(_ active: Bool) {
+        markerImageView.isHidden = !active
+        isUserInteractionEnabled = active
+        isAccessibilityElement = active
+    }
+
     func apply(_ marker: RenderedMarker) {
         let size = marker.image.size
         markerImageView.image = marker.image
@@ -143,6 +150,7 @@ final class PersonPinView: MarkerView {
     override func configure() {
         guard let a = annotation as? PersonAnnotation else { return }
         apply(MarkerRenderer.person(a.item, selected: isSelected, traits: traitCollection))
+        setActive(a.item.active)
         accessibilityLabel = a.item.name
         accessibilityIdentifier = "pin-\(a.item.name)"
     }
@@ -166,6 +174,7 @@ final class SpotPinView: MarkerView {
     override func configure() {
         guard let a = annotation as? SpotAnnotation else { return }
         apply(MarkerRenderer.spot(a.item, selected: isSelected, traits: traitCollection))
+        setActive(a.item.active)
         accessibilityLabel = "\(a.item.name)，\(a.item.count) 次"
         accessibilityIdentifier = "spot-\(a.item.name)"
     }
@@ -179,13 +188,26 @@ final class ClusterMarkerView: MarkerView {
         let members = cluster.memberAnnotations
         let people = members.compactMap { ($0 as? PersonAnnotation)?.item }
         if !people.isEmpty {
-            apply(MarkerRenderer.personCluster(people, traits: traitCollection))
-            accessibilityLabel = "\(people.count) 人"
+            // 回放中只画已经出现的人；只剩一个时画成普通头像
+            let active = people.filter(\.active)
+            if active.count == 1 {
+                apply(MarkerRenderer.person(active[0], selected: false, traits: traitCollection))
+            } else {
+                apply(MarkerRenderer.personCluster(active.isEmpty ? people : active, traits: traitCollection))
+            }
+            setActive(!active.isEmpty)
+            accessibilityLabel = "\(active.count) 人"
             accessibilityIdentifier = "cluster-people"
         } else {
             let spots = members.compactMap { ($0 as? SpotAnnotation)?.item }
-            apply(MarkerRenderer.spotCluster(spots, traits: traitCollection))
-            accessibilityLabel = "\(spots.count) 个地点"
+            let active = spots.filter(\.active)
+            if active.count == 1 {
+                apply(MarkerRenderer.spot(active[0], selected: false, traits: traitCollection))
+            } else {
+                apply(MarkerRenderer.spotCluster(active.isEmpty ? spots : active, traits: traitCollection))
+            }
+            setActive(!active.isEmpty)
+            accessibilityLabel = "\(active.count) 个地点"
             accessibilityIdentifier = "cluster-spots"
         }
     }
