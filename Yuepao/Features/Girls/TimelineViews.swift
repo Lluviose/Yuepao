@@ -259,7 +259,7 @@ struct GirlTimelineView: View {
         }
     }
 
-    private func chip(_ title: String, count: Int, selected: Bool, color: Color = .accentColor, action: @escaping () -> Void) -> some View {
+    private func chip(_ title: String, count: Int, selected: Bool, color: Color = Palette.wineTop, action: @escaping () -> Void) -> some View {
         Button {
             withAnimation(.snappy) { action() }
         } label: {

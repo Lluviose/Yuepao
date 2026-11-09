@@ -211,7 +211,7 @@ struct GirlEditView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
-                        .background(Circle().fill(Color.accentColor))
+                        .background(Circle().fill(Palette.wineGradient))
                         .overlay(Circle().stroke(Palette.surface, lineWidth: 3))
                         .offset(x: 2, y: 2)
                 }

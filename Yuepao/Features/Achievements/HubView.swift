@@ -212,20 +212,20 @@ struct HubView: View {
                 DataRow(symbol: "chart.bar", title: "完整统计", detail: "\(encounters.count) 次")
             }
             .accessibilityIdentifier("openStats")
-            Divider().padding(.leading, 50)
+            Divider().padding(.leading, 58)
             NavigationLink {
                 AlbumView()
             } label: {
                 DataRow(symbol: "photo.on.rectangle.angled", title: "相册", detail: "原画质")
             }
             .accessibilityIdentifier("openAlbum")
-            Divider().padding(.leading, 50)
+            Divider().padding(.leading, 58)
             NavigationLink {
                 HealthTestListView()
             } label: {
                 DataRow(symbol: "cross.case", title: "检测记录", detail: nil)
             }
-            Divider().padding(.leading, 50)
+            Divider().padding(.leading, 58)
             NavigationLink {
                 PlaceListView()
             } label: {
@@ -283,14 +283,13 @@ struct CollectionTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Palette.gold)
+            HStack(alignment: .top) {
+                IconBadge(symbol: symbol, color: Palette.gold, size: 36)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
             }
             Spacer(minLength: 0)
             Text(value)
@@ -318,11 +317,8 @@ struct DataRow: View {
     let detail: String?
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 15))
-                .foregroundStyle(Palette.gold)
-                .frame(width: 22)
+        HStack(spacing: 12) {
+            IconBadge(symbol: symbol, color: Palette.gold, size: 30)
             Text(title).foregroundStyle(Color.primary)
             Spacer()
             if let detail {
@@ -333,7 +329,7 @@ struct DataRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 11)
         .contentShape(Rectangle())
     }
 }

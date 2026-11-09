@@ -175,12 +175,16 @@ struct CodexCard: View {
         .frame(maxWidth: .infinity, minHeight: 112)
         .padding(.vertical, 10)
         .padding(.horizontal, 6)
+        // 解锁的是亮的卡片底再罩一层淡金，没解锁的只有半透明的底，在纸色上不会比解锁的还显眼
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(item.unlocked
-                      ? AnyShapeStyle(LinearGradient(colors: [Palette.gold.opacity(0.14), Palette.gold.opacity(0.04)],
-                                                     startPoint: .top, endPoint: .bottom))
-                      : AnyShapeStyle(Palette.surface))
+                .fill(LinearGradient(colors: [Palette.gold.opacity(item.unlocked ? 0.16 : 0),
+                                              Palette.gold.opacity(item.unlocked ? 0.05 : 0)],
+                                     startPoint: .top, endPoint: .bottom))
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Palette.surface.opacity(item.unlocked ? 1 : 0.5))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)

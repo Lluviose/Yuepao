@@ -291,7 +291,7 @@ struct PersonFilterChip: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 18, minHeight: 18)
-                        .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.6)))
+                        .background(Capsule().fill(selected ? Palette.wineTop : Color.secondary.opacity(0.6)))
                         .overlay(Capsule().stroke(Palette.canvas, lineWidth: 2))
                         .offset(x: 6, y: -4)
                 }
@@ -328,7 +328,7 @@ struct DateChip: View {
         .frame(width: 44, height: 48)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Calendar.current.isDateInToday(date) ? Color.accentColor : Color.accentColor.opacity(0.1))
+                .fill(Calendar.current.isDateInToday(date) ? Palette.wineTop : Color.accentColor.opacity(0.1))
         )
     }
 }

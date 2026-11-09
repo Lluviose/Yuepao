@@ -474,7 +474,7 @@ struct PlaybackPanel: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .background(Color.accentColor, in: Circle())
+                        .background(Palette.wineGradient, in: Circle())
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
