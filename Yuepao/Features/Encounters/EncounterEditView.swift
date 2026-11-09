@@ -320,7 +320,7 @@ struct EncounterEditView: View {
         } footer: {
             if isRisky {
                 Text("有风险：保存后会提醒你按时间做检测。")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.fertile)
             }
         }
     }

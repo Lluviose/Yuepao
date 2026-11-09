@@ -316,8 +316,8 @@ struct CityStatsView: View {
                     HStack {
                         Text(row.city)
                         Spacer()
-                        if row.girls > 0 { Badge(text: "\(row.girls) 人", color: .purple) }
-                        if row.encounters > 0 { Badge(text: "\(row.encounters) 次", color: .orange) }
+                        if row.girls > 0 { Badge(text: "\(row.girls) 人", color: Palette.gold) }
+                        if row.encounters > 0 { Badge(text: "\(row.encounters) 次", color: .accentColor) }
                     }
                 }
             }

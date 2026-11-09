@@ -182,15 +182,16 @@ enum MarkerRenderer {
         }
     }
 
+    /// 地点：酒红色圆点，次数越多越大（颜色不再越来越红）
     static func countBadge(count: Int, suffix: String) -> UIImage {
-        let diameter = 30 + min(CGFloat(count), 20) * 1.4
-        let intensity = min(CGFloat(count), 12) / 12
-        let color = UIColor(red: 0.98, green: 0.55 - 0.35 * intensity, blue: 0.35 - 0.1 * intensity, alpha: 0.95)
+        let diameter = 28 + min(CGFloat(count), 20) * 1.2
+        let color = UIColor(red: 0.55, green: 0.17, blue: 0.27, alpha: 0.94)
         return circle(text: "\(count)\(suffix)", diameter: diameter, color: color)
     }
 
+    /// 人的聚合：深灰
     static func girlCluster(count: Int) -> UIImage {
-        circle(text: "\(count)人", diameter: 46, color: UIColor.systemPurple.withAlphaComponent(0.9))
+        circle(text: "\(count)人", diameter: 44, color: UIColor(white: 0.16, alpha: 0.92))
     }
 
     private static func circle(text: String, diameter: CGFloat, color: UIColor) -> UIImage {
@@ -200,12 +201,14 @@ enum MarkerRenderer {
             color.setFill()
             let path = UIBezierPath(ovalIn: rect)
             path.fill()
-            UIColor.white.setStroke()
-            path.lineWidth = 2.5
+            UIColor.white.withAlphaComponent(0.9).setStroke()
+            path.lineWidth = 2
             path.stroke()
 
+            let baseFont = UIFont.systemFont(ofSize: max(12, diameter * 0.36), weight: .semibold)
+            let font = baseFont.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: baseFont.pointSize) } ?? baseFont
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: max(12, diameter * 0.36), weight: .bold),
+                .font: font,
                 .foregroundColor: UIColor.white
             ]
             let s = (text as NSString).size(withAttributes: attrs)

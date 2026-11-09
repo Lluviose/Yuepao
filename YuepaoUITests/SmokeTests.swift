@@ -183,6 +183,17 @@ final class SmokeTests: XCTestCase {
         mei.tap()
         sleep(2)
         shot(app, "c1-detail")
+
+        let memo = app.buttons["quickMemo"].firstMatch
+        if memo.waitForExistence(timeout: 3) {
+            memo.tap()
+            sleep(1)
+            app.typeText("她说下周想去看海")
+            shot(app, "g1-note-sheet")
+            app.buttons["取消"].firstMatch.tap()
+            sleep(1)
+        }
+
         app.swipeUp()
         sleep(1)
         shot(app, "c2-detail-more")
@@ -192,6 +203,14 @@ final class SmokeTests: XCTestCase {
             cycleLink.tap()
             sleep(2)
             shot(app, "c3-cycle")
+            let addPeriod = app.buttons["补记一次"].firstMatch
+            if scrollTo(addPeriod, in: app) {
+                addPeriod.tap()
+                sleep(1)
+                shot(app, "g2-period-sheet")
+                app.buttons["取消"].firstMatch.tap()
+                sleep(1)
+            }
             app.navigationBars.buttons.element(boundBy: 0).tap()
             sleep(1)
         }
@@ -220,5 +239,13 @@ final class SmokeTests: XCTestCase {
             sleep(2)
             shot(app, "f3-dark-detail")
         }
+    }
+
+    func testLockScreen() {
+        let app = makeApp(seed: false)
+        app.launchArguments.append("-previewLock")
+        app.launch()
+        sleep(2)
+        shot(app, "h1-lock")
     }
 }

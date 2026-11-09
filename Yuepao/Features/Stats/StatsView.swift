@@ -85,7 +85,7 @@ struct StatsView: View {
                             Text(item.text)
                             Spacer()
                             Text(item.days == 0 ? "今天" : "\(item.days) 天后")
-                                .foregroundStyle(item.days <= 3 ? Color.orange : Color.secondary)
+                                .foregroundStyle(item.days <= 3 ? Palette.gold : Color.secondary)
                         }
                     }
                 }
@@ -97,7 +97,7 @@ struct StatsView: View {
                             AvatarView(photoID: entry.girl.avatarID, name: entry.girl.name, size: 32)
                             Text("\(entry.girl.name) 被冷落了")
                             Spacer()
-                            Text("\(entry.days) 天没联系").foregroundStyle(.red)
+                            Text("\(entry.days) 天没联系").foregroundStyle(Palette.period)
                         }
                     }
                 }
@@ -184,7 +184,7 @@ struct StatsView: View {
                     x: .value("星期", item.label),
                     y: .value("次数", chartsVisible ? item.count : 0)
                 )
-                .foregroundStyle(Color.pink.gradient)
+                .foregroundStyle(Color.accentColor.gradient)
                 .cornerRadius(3)
             }
             .frame(height: 140)
@@ -195,7 +195,7 @@ struct StatsView: View {
                     x: .value("时段", item.label),
                     y: .value("次数", chartsVisible ? item.count : 0)
                 )
-                .foregroundStyle(Color.purple.gradient)
+                .foregroundStyle(Palette.gold.gradient)
                 .cornerRadius(3)
             }
             .frame(height: 140)
@@ -220,7 +220,7 @@ struct StatsView: View {
                     HStack(spacing: 10) {
                         Text("\(index + 1)")
                             .font(.subheadline.weight(.bold))
-                            .foregroundStyle(index < 3 ? Color.orange : Color.secondary)
+                            .foregroundStyle(index < 3 ? Palette.gold : Color.secondary)
                             .frame(width: 20)
                         AvatarView(photoID: entry.girl.avatarID, name: entry.girl.name, size: 30)
                         VStack(alignment: .leading, spacing: 4) {
@@ -284,7 +284,7 @@ struct StatsView: View {
             }
             if let lastRisk = s.lastRiskDate, tests.first.map({ $0.date < lastRisk }) ?? true {
                 Label("上次风险（\(Fmt.daysAgo(lastRisk))）之后还没做过检测", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.fertile)
                     .font(.subheadline)
             }
         }

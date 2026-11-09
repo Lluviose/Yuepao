@@ -31,8 +31,8 @@ struct AvatarView: View {
             ZStack {
                 Circle().fill(Palette.avatarGradient(for: name))
                 Text(String(name.prefix(1)))
-                    .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: size * 0.4, weight: .medium, design: .serif))
+                    .foregroundStyle(Color.white.opacity(0.95))
             }
         }
     }
@@ -40,17 +40,21 @@ struct AvatarView: View {
 
 // MARK: - 小标签
 
+/// 小标签：中性底色 + 一个小色点，不用大面积彩色
 struct Badge: View {
     let text: String
     var color: Color = .accentColor
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(color)
-            .background(color.opacity(0.14), in: Capsule())
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 5, height: 5)
+            Text(text)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
     }
 }
 
@@ -104,9 +108,11 @@ struct ChipsView: View {
             ForEach(items, id: \.self) { item in
                 Text(item)
                     .font(.footnote)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(color.opacity(0.12), in: Capsule())
+                    .foregroundStyle(Color.primary.opacity(0.8))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                    .overlay(Capsule().stroke(Palette.hairline, lineWidth: 0.5))
             }
         }
     }
@@ -216,7 +222,7 @@ struct StarRating: View {
                     value = (value == i) ? 0 : i
                 } label: {
                     Image(systemName: i <= value ? "star.fill" : "star")
-                        .foregroundStyle(i <= value ? Color.orange : Color.secondary)
+                        .foregroundStyle(i <= value ? Palette.gold : Color.secondary.opacity(0.5))
                 }
                 .buttonStyle(.borderless)
             }
@@ -232,8 +238,8 @@ struct StarDisplay: View {
         HStack(spacing: 2) {
             ForEach(Array(1...max), id: \.self) { i in
                 Image(systemName: i <= value ? "star.fill" : "star")
-                    .font(.caption2)
-                    .foregroundStyle(i <= value ? Color.orange : Color.secondary.opacity(0.4))
+                    .font(.system(size: 9))
+                    .foregroundStyle(i <= value ? Palette.gold : Color.secondary.opacity(0.3))
             }
         }
     }

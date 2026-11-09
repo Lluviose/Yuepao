@@ -66,7 +66,7 @@ struct LocationPickerView: View {
 
             Image(systemName: "mappin")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.accentColor)
                 .shadow(radius: 2)
                 .offset(y: -17)
                 .allowsHitTesting(false)

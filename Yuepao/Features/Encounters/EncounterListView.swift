@@ -120,7 +120,7 @@ struct EncounterRow: View {
                     HStack(spacing: 6) {
                         stackedAvatars
                         Text(encounter.girlNames)
-                            .font(.headline)
+                            .font(Typo.display(17))
                             .lineLimit(1)
                     }
                 }
@@ -133,7 +133,7 @@ struct EncounterRow: View {
                         Text(place.displayName).lineLimit(1)
                     }
                     if encounter.overnight {
-                        Image(systemName: "moon.fill").foregroundStyle(.indigo)
+                        Image(systemName: "moon").foregroundStyle(.secondary)
                     }
                 }
                 .font(.caption)
@@ -145,7 +145,7 @@ struct EncounterRow: View {
                     if encounter.stiRisk || encounter.pregnancyRisk {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Palette.fertile)
                     }
                     Text("×\(encounter.count)")
                         .font(.subheadline.weight(.semibold))
@@ -180,7 +180,7 @@ struct DateChip: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("\(Calendar.current.component(.day, from: date))")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 20, weight: .medium, design: .serif))
                 .foregroundStyle(Calendar.current.isDateInToday(date) ? Color.white : Color.primary)
             Text(date.formatted(Date.FormatStyle().weekday(.abbreviated).locale(Fmt.locale)))
                 .font(.system(size: 10, weight: .medium))

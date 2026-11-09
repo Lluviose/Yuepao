@@ -131,48 +131,64 @@ struct GirlDetailView: View {
 
     private func header(_ d: GirlDetails) -> some View {
         Section {
-            VStack(spacing: 12) {
-                AvatarView(photoID: girl.avatarID, name: girl.name, size: 96, ring: girl.status.color)
-                    .shadow(color: girl.status.color.opacity(0.25), radius: 14, y: 6)
+            VStack(spacing: 14) {
+                AvatarView(photoID: girl.avatarID, name: girl.name, size: 104)
+                    .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 3))
+                    .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+                    .padding(.top, 6)
                 VStack(spacing: 6) {
                     Text(girl.name)
-                        .font(.title2.weight(.bold))
-                        .fontDesign(.rounded)
+                        .font(Typo.display(30))
                     HStack(spacing: 6) {
-                        if !girl.rank.isEmpty { Badge(text: girl.rank) }
+                        if !girl.rank.isEmpty { Badge(text: girl.rank, color: Palette.gold) }
                         Badge(text: girl.status.title, color: girl.status.color)
                     }
                     let line = headerLine(d)
                     if !line.isEmpty {
-                        Text(line).font(.subheadline).foregroundStyle(.secondary)
+                        Text(line)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if !d.personality.isEmpty || !d.tags.isEmpty {
-                    ChipsView(items: d.personality + d.tags, color: girl.status.color)
+                    ChipsView(items: d.personality + d.tags)
                         .frame(maxWidth: .infinity)
                 }
                 HStack(spacing: 0) {
-                    QuickAction(title: "记一次", symbol: "heart.fill") { sheet = .encounter }
+                    QuickAction(title: "记一次", symbol: "heart", tint: .accentColor) { sheet = .encounter }
                         .accessibilityIdentifier("logEncounter")
-                    QuickAction(title: "联系过", symbol: "message.fill", tint: .teal) {
+                    QuickAction(title: "联系过", symbol: "bubble.left") {
                         withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
                     }
-                    QuickAction(title: "待办", symbol: "checklist", tint: Palette.todo) { sheet = .todo }
-                    QuickAction(title: "备忘", symbol: "square.and.pencil", tint: Palette.memo) { sheet = .memo }
+                    QuickAction(title: "待办", symbol: "checklist") { sheet = .todo }
+                    QuickAction(title: "备忘", symbol: "square.and.pencil") { sheet = .memo }
+                        .accessibilityIdentifier("quickMemo")
                 }
-                .padding(.top, 2)
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
             .listRowBackground(heroBackground)
         }
     }
 
+    /// 有头像时用模糊后的照片做底，没有时用她的头像色调
+    @ViewBuilder
     private var heroBackground: some View {
         ZStack {
             Color(uiColor: .secondarySystemGroupedBackground)
-            LinearGradient(colors: [girl.status.color.opacity(0.16), girl.status.color.opacity(0.0)],
-                           startPoint: .top, endPoint: .bottom)
+            if let id = girl.avatarID, let image = PhotoStore.shared.thumbnail(id, size: 240) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 40)
+                    .opacity(0.55)
+                    .clipped()
+            } else {
+                Palette.avatarGradient(for: girl.name).opacity(0.28)
+            }
+            LinearGradient(colors: [.clear, Color(uiColor: .secondarySystemGroupedBackground).opacity(0.92)],
+                           startPoint: .center, endPoint: .bottom)
         }
     }
 
@@ -213,7 +229,7 @@ struct GirlDetailView: View {
         if !items.isEmpty {
             Section {
                 ForEach(items, id: \.self) { text in
-                    Label(text, systemImage: "bell.badge").foregroundStyle(.orange)
+                    Callout(symbol: "bell", tint: Palette.gold, title: text)
                 }
             }
         }
@@ -396,7 +412,7 @@ struct GirlDetailView: View {
                 if !d.giftPrefs.isEmpty { TextBlock(label: "喜欢的礼物", text: d.giftPrefs) }
                 if !d.taboos.isEmpty {
                     TextBlock(label: "雷点 / 禁忌", text: d.taboos)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Palette.period)
                 }
             }
         }
@@ -633,23 +649,23 @@ struct NoteSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var note = NoteItem()
+    @FocusState private var focused: Bool
 
     var body: some View {
-        NavigationStack {
-            Form {
-                TextField("内容", text: $note.text, axis: .vertical).lineLimit(3...12)
-                DatePicker("日期", selection: $note.date, displayedComponents: .date)
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { onSave(note); dismiss() }.disabled(note.text.trimmed.isEmpty)
-                }
-            }
+        ComposerShell(title: title, canSave: !note.text.trimmed.isEmpty,
+                      onCancel: { dismiss() },
+                      onSave: { onSave(note); dismiss() }) {
+            DatePicker("日期", selection: $note.date, displayedComponents: .date)
+                .labelsHidden()
+                .fixedSize()
+            TextField("写点什么…", text: $note.text, axis: .vertical)
+                .font(Typo.display(20, weight: .regular))
+                .lineSpacing(5)
+                .lineLimit(6...20)
+                .focused($focused)
         }
-        .presentationDetents([.medium, .large])
+        .composerSheet()
+        .onAppear { focused = true }
     }
 }
 
@@ -657,27 +673,58 @@ struct GiftSheet: View {
     let onSave: (GiftItem) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var config = ConfigStore.shared
     @State private var gift = GiftItem()
+    @State private var amountText = ""
+    @FocusState private var amountFocused: Bool
 
     var body: some View {
-        NavigationStack {
-            Form {
-                TextField("礼物 / 说明", text: $gift.item)
-                LabeledContent("金额") { DecimalField(title: "¥", value: $gift.amount) }
-                OptionSinglePicker(title: "场合", key: .giftOccasions, selection: $gift.occasion)
-                DatePicker("日期", selection: $gift.date, displayedComponents: .date)
+        ComposerShell(title: "礼物与红包",
+                      canSave: !(gift.item.trimmed.isEmpty && gift.occasion.isEmpty && gift.amount == 0),
+                      onCancel: { dismiss() },
+                      onSave: { onSave(gift); dismiss() }) {
+            VStack(spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("¥")
+                        .font(Typo.display(26, weight: .regular))
+                        .foregroundStyle(.secondary)
+                    TextField("0", text: $amountText)
+                        .font(Typo.display(54, weight: .medium))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.center)
+                        .fixedSize()
+                        .focused($amountFocused)
+                        .onChange(of: amountText) { _, t in
+                            gift.amount = Double(t.replacingOccurrences(of: ",", with: ".")) ?? 0
+                        }
+                }
+                Text("金额").font(.caption).foregroundStyle(.tertiary)
             }
-            .navigationTitle("礼物 / 红包")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { onSave(gift); dismiss() }
-                        .disabled(gift.item.trimmed.isEmpty && gift.occasion.isEmpty && gift.amount == 0)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+
+            TextField("送了什么", text: $gift.item)
+                .composerField()
+
+            VStack(alignment: .leading, spacing: 10) {
+                ComposerLabel("场合")
+                ChipRow {
+                    ForEach(config.options(.giftOccasions), id: \.self) { o in
+                        ChoiceChip(title: o, selected: gift.occasion == o) {
+                            gift.occasion = gift.occasion == o ? "" : o
+                        }
+                    }
                 }
             }
+
+            HStack {
+                ComposerLabel("日期")
+                DatePicker("日期", selection: $gift.date, displayedComponents: .date)
+                    .labelsHidden()
+            }
         }
-        .presentationDetents([.medium, .large])
+        .composerSheet(detents: [.large])
+        .onAppear { amountFocused = true }
     }
 }
 
@@ -687,23 +734,28 @@ struct ImportantDateSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var item = ImportantDate()
 
+    private let suggestions = ["在一起纪念日", "第一次见面", "第一次约会", "她的生理期开始", "相识纪念"]
+
     var body: some View {
-        NavigationStack {
-            Form {
-                TextField("名称（如：在一起纪念日）", text: $item.title)
-                DatePicker("日期", selection: $item.date, displayedComponents: .date)
-                Toggle("每年提醒", isOn: $item.remind)
-            }
-            .navigationTitle("重要日期")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { onSave(item); dismiss() }.disabled(item.title.trimmed.isEmpty)
+        ComposerShell(title: "纪念日", canSave: !item.title.trimmed.isEmpty,
+                      onCancel: { dismiss() },
+                      onSave: { onSave(item); dismiss() }) {
+            TextField("纪念什么", text: $item.title)
+                .font(Typo.display(24, weight: .medium))
+            ChipRow {
+                ForEach(suggestions, id: \.self) { s in
+                    ChoiceChip(title: s, selected: item.title == s) { item.title = s }
                 }
             }
+            DatePicker("日期", selection: $item.date, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .tint(.accentColor)
+            Toggle(isOn: $item.remind) {
+                Label("每年提醒", systemImage: "bell")
+            }
+            .composerField()
         }
-        .presentationDetents([.medium])
+        .composerSheet(detents: [.large])
     }
 }
 

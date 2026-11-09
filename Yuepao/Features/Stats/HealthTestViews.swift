@@ -18,7 +18,7 @@ struct HealthTestListView: View {
                             Text(Fmt.date(t.date)).foregroundStyle(.primary)
                             Spacer()
                             if !t.result.isEmpty {
-                                Badge(text: t.result, color: t.result == "阴性" ? .green : (t.result == "阳性" ? .red : .orange))
+                                Badge(text: t.result, color: t.result == "阴性" ? Palette.status : (t.result == "阳性" ? Palette.period : Palette.fertile))
                             }
                         }
                         if !t.items.isEmpty {

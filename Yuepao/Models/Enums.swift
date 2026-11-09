@@ -20,12 +20,12 @@ enum RelationStatus: String, CaseIterable, Identifiable, Codable {
 
     var uiColor: UIColor {
         switch self {
-        case .flirting: return .systemOrange
-        case .active: return .systemPink
-        case .steady: return .systemRed
-        case .cooling: return .systemTeal
-        case .ended: return .systemGray
-        case .blocked: return .darkGray
+        case .flirting: return UIColor(red: 0.78, green: 0.60, blue: 0.38, alpha: 1)   // 香槟
+        case .active: return UIColor(red: 0.69, green: 0.30, blue: 0.39, alpha: 1)     // 玫瑰木
+        case .steady: return UIColor(red: 0.52, green: 0.17, blue: 0.27, alpha: 1)     // 酒红
+        case .cooling: return UIColor(red: 0.43, green: 0.52, blue: 0.60, alpha: 1)    // 雾蓝
+        case .ended: return UIColor(red: 0.60, green: 0.60, blue: 0.62, alpha: 1)
+        case .blocked: return UIColor(red: 0.32, green: 0.32, blue: 0.34, alpha: 1)
         }
     }
 
@@ -67,9 +67,9 @@ enum Protection: String, CaseIterable, Identifiable, Codable {
     var color: Color {
         switch self {
         case .unrecorded: return .secondary
-        case .condom, .both: return .green
-        case .pill: return .blue
-        case .withdrawal, .none: return .orange
+        case .condom, .both: return Palette.status
+        case .pill: return Palette.todo
+        case .withdrawal, .none: return Palette.fertile
         }
     }
 }

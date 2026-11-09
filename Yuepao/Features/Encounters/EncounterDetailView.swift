@@ -168,9 +168,9 @@ struct EncounterDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 HStack(spacing: 8) {
-                    heroPill("×\(encounter.count) 回合", "flame.fill", .pink)
+                    heroPill("×\(encounter.count) 回合", "flame", .accentColor)
                     if encounter.durationMinutes > 0 {
-                        heroPill(Choices.durationTitle(encounter.durationMinutes), "clock.fill", .indigo)
+                        heroPill(Choices.durationTitle(encounter.durationMinutes), "clock", .secondary)
                     }
                     if encounter.protection != .unrecorded {
                         heroPill(encounter.protection.title, encounter.protection.symbol, encounter.protection.color)
@@ -181,7 +181,7 @@ struct EncounterDetailView: View {
                         ForEach(1...5, id: \.self) { i in
                             Image(systemName: i <= encounter.rating ? "star.fill" : "star")
                                 .font(.subheadline)
-                                .foregroundStyle(i <= encounter.rating ? Color.orange : Color.secondary.opacity(0.35))
+                                .foregroundStyle(i <= encounter.rating ? Palette.gold : Color.secondary.opacity(0.3))
                         }
                     }
                 }
@@ -227,34 +227,27 @@ struct EncounterDetailView: View {
         let hours = Date().timeIntervalSince(encounter.date) / 3600
         if encounter.pregnancyRisk && !d.pillTaken && hours >= 0 && hours < 72 {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("有怀孕风险", systemImage: "exclamationmark.triangle.fill")
-                        .font(.headline)
-                        .foregroundStyle(.orange)
-                    Text("已经过去 \(Int(hours)) 小时。紧急避孕药 72 小时内有效，越早越好。")
-                        .font(.subheadline)
-                    Button("已处理（已吃药）") {
-                        encounter.update { $0.pillTaken = true }
-                    }
-                    .buttonStyle(.bordered)
+                Callout(symbol: "exclamationmark.triangle", tint: Palette.fertile,
+                        title: "有怀孕风险",
+                        message: "已经过去 \(Int(hours)) 小时。紧急避孕药 72 小时内有效，越早越好。")
+                Button {
+                    withAnimation(.snappy) { encounter.update { $0.pillTaken = true } }
+                    Haptics.success()
+                } label: {
+                    Label("已处理（已吃药）", systemImage: "checkmark")
+                        .font(.subheadline.weight(.medium))
                 }
-                .padding(.vertical, 4)
             }
         }
         if encounter.stiRisk {
             let days = Fmt.days(from: encounter.date)
             if days <= 60 {
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("有性病风险", systemImage: "cross.case")
-                            .font(.headline)
-                            .foregroundStyle(.orange)
-                        Text(days < 14
-                             ? "建议 \(14 - days) 天后做一次检测，6 周后做 HIV / 梅毒检测。"
-                             : (days < 42 ? "可以去做检测了；HIV / 梅毒建议 \(42 - days) 天后再测一次。" : "已过窗口期，可以做 HIV / 梅毒检测。"))
-                            .font(.subheadline)
-                    }
-                    .padding(.vertical, 4)
+                    Callout(symbol: "cross.case", tint: Palette.fertile,
+                            title: "有性病风险",
+                            message: days < 14
+                                ? "建议 \(14 - days) 天后做一次检测，6 周后做 HIV / 梅毒检测。"
+                                : (days < 42 ? "可以去做检测了；HIV / 梅毒建议 \(42 - days) 天后再测一次。" : "已过窗口期，可以做 HIV / 梅毒检测。"))
                 }
             }
         }

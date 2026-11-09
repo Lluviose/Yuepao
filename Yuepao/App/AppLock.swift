@@ -32,11 +32,15 @@ final class AppLock: ObservableObject {
         }
     }
 
+    /// UI 测试截锁屏用
+    static var previewLock: Bool { ProcessInfo.processInfo.arguments.contains("-previewLock") }
+
     private init() {
-        isLocked = Self.lockEnabled && Self.canAuthenticate
+        isLocked = Self.previewLock || (Self.lockEnabled && Self.canAuthenticate)
     }
 
     func handle(_ phase: ScenePhase) {
+        guard !Self.previewLock else { return }
         switch phase {
         case .background:
             if backgroundedAt == nil { backgroundedAt = Date() }
@@ -106,12 +110,10 @@ struct LockScreen: View {
                     .opacity(appeared ? 1 : 0)
                 VStack(spacing: 6) {
                     Text("手账")
-                        .font(.title2.weight(.semibold))
-                        .fontDesign(.rounded)
-                    Label("已锁定", systemImage: "lock.fill")
-                        .font(.subheadline)
+                        .font(Typo.display(28))
+                    Label("已锁定", systemImage: "lock")
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .symbolEffect(.pulse, options: .repeating)
                 }
                 .opacity(appeared ? 1 : 0)
                 Spacer()
@@ -119,13 +121,14 @@ struct LockScreen: View {
                     lock.authenticate()
                 } label: {
                     Label("使用\(AppLock.biometryName)解锁", systemImage: "faceid")
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: 280)
-                        .padding(.vertical, 6)
+                        .font(.body.weight(.medium))
+                        .frame(maxWidth: 260)
+                        .padding(.vertical, 8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
+                .tint(.primary)
                 .padding(.bottom, 48)
                 .opacity(appeared ? 1 : 0)
             }
@@ -151,30 +154,28 @@ struct BrandBackground: View {
     var body: some View {
         ZStack {
             Color(uiColor: .systemBackground)
-            RadialGradient(colors: [Color.accentColor.opacity(0.18), .clear],
-                           center: .top, startRadius: 0, endRadius: 520)
-            RadialGradient(colors: [Color.orange.opacity(0.10), .clear],
-                           center: .bottomTrailing, startRadius: 0, endRadius: 420)
+            RadialGradient(colors: [Color.accentColor.opacity(0.14), .clear],
+                           center: UnitPoint(x: 0.5, y: 0.28), startRadius: 0, endRadius: 460)
+            LinearGradient(colors: [.clear, Palette.gold.opacity(0.06)], startPoint: .top, endPoint: .bottom)
         }
         .ignoresSafeArea()
     }
 }
 
-/// 和 App 图标一致的笔记本图形
+/// App 图标本身（皮面手账），锁屏和遮罩上用
 struct BrandGlyph: View {
     var size: CGFloat = 80
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-            .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.38, blue: 0.47),
-                                          Color(red: 0.96, green: 0.63, blue: 0.47)],
-                                 startPoint: .top, endPoint: .bottom))
+        Image("BrandMark")
+            .resizable()
+            .interpolation(.high)
             .frame(width: size, height: size)
-            .overlay {
-                Image(systemName: "book.closed.fill")
-                    .font(.system(size: size * 0.42, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .shadow(color: Color.accentColor.opacity(0.35), radius: size * 0.2, y: size * 0.08)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.225, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.28), radius: size * 0.22, y: size * 0.12)
     }
 }

@@ -285,6 +285,7 @@ struct PeriodEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var entry: PeriodEntry
     @State private var hasEnd: Bool
+    @State private var editingEnd = false
 
     init(entry: PeriodEntry, onSave: @escaping (PeriodEntry) -> Void, onDelete: (() -> Void)? = nil) {
         self.onSave = onSave
@@ -293,41 +294,108 @@ struct PeriodEditSheet: View {
         _hasEnd = State(initialValue: entry.end != nil)
     }
 
+    private var lengthText: String? {
+        guard hasEnd, let end = entry.end else { return nil }
+        return "共 \(Fmt.days(from: entry.start, to: end) + 1) 天"
+    }
+
     var body: some View {
-        NavigationStack {
-            Form {
-                DatePicker("开始", selection: $entry.start, in: ...Date(), displayedComponents: .date)
-                Toggle("已结束", isOn: $hasEnd.animation(.snappy))
-                if hasEnd {
-                    DatePicker("最后一天", selection: Binding(
-                        get: { entry.end ?? entry.start },
-                        set: { entry.end = $0 }
-                    ), in: entry.start...Date.distantFuture, displayedComponents: .date)
+        ComposerShell(title: onDelete == nil ? "记录经期" : "编辑经期",
+                      onCancel: { dismiss() },
+                      onSave: save) {
+            HStack(spacing: 12) {
+                tile("开始", date: entry.start, active: !editingEnd) {
+                    editingEnd = false
                 }
-                if let onDelete {
-                    Section {
-                        Button("删除这条记录", role: .destructive) {
-                            onDelete()
-                            dismiss()
-                        }
+                Image(systemName: "arrow.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                tile("最后一天", date: hasEnd ? entry.end : nil, active: editingEnd) {
+                    if !hasEnd {
+                        hasEnd = true
+                        entry.end = max(entry.start, Calendar.current.date(byAdding: .day, value: 4, to: entry.start) ?? entry.start)
                     }
+                    editingEnd = true
                 }
             }
-            .navigationTitle("经期")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        var e = entry
-                        e.start = Calendar.current.startOfDay(for: e.start)
-                        e.end = hasEnd ? Calendar.current.startOfDay(for: max(e.end ?? e.start, e.start)) : nil
-                        onSave(e)
-                        dismiss()
+            if let lengthText {
+                Text(lengthText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity)
+            }
+
+            DatePicker("", selection: editingEnd ? endBinding : $entry.start,
+                       in: editingEnd ? entry.start...Date.distantFuture : Date.distantPast...Date(),
+                       displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .tint(Palette.period)
+                .id(editingEnd)
+
+            if hasEnd {
+                Button {
+                    withAnimation(.snappy) {
+                        hasEnd = false
+                        entry.end = nil
+                        editingEnd = false
                     }
+                } label: {
+                    Label("还没结束", systemImage: "hourglass")
+                        .font(.subheadline)
                 }
+                .buttonStyle(.borderless)
+                .frame(maxWidth: .infinity)
+            }
+
+            if let onDelete {
+                Button(role: .destructive) {
+                    onDelete()
+                    dismiss()
+                } label: {
+                    Text("删除这条记录").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
         }
-        .presentationDetents([.medium])
+        .composerSheet(detents: [.large])
+    }
+
+    private var endBinding: Binding<Date> {
+        Binding(get: { entry.end ?? entry.start }, set: { entry.end = $0 })
+    }
+
+    private func tile(_ title: String, date: Date?, active: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.snappy) { action() }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text(date.map { Fmt.shortDate($0) } ?? "未结束")
+                    .font(Typo.display(20, weight: .medium))
+                    .foregroundStyle(date == nil ? Color.secondary : Color.primary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(active ? Palette.period.opacity(0.12) : Color(uiColor: .tertiarySystemFill))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(active ? Palette.period.opacity(0.6) : Color.clear, lineWidth: 1.2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func save() {
+        var e = entry
+        e.start = Calendar.current.startOfDay(for: e.start)
+        e.end = hasEnd ? Calendar.current.startOfDay(for: max(e.end ?? e.start, e.start)) : nil
+        onSave(e)
+        dismiss()
     }
 }

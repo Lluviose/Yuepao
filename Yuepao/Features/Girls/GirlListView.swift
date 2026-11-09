@@ -77,7 +77,7 @@ struct GirlListView: View {
                         } label: {
                             Label("联系过", systemImage: "message.fill")
                         }
-                        .tint(.teal)
+                        .tint(Palette.todo)
                     }
                 }
             }
@@ -199,7 +199,7 @@ struct GirlRow: View {
             AvatarView(photoID: girl.avatarID, name: girl.name, size: 50, ring: girl.status.color)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(girl.name).font(.headline)
+                    Text(girl.name).font(Typo.display(17))
                     if !girl.rank.isEmpty { Badge(text: girl.rank) }
                     Badge(text: girl.status.title, color: girl.status.color)
                     ForEach(indicators(d), id: \.symbol) { item in

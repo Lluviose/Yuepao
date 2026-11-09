@@ -199,7 +199,7 @@ struct TodoListSections: View {
                 } label: {
                     Label("推迟", systemImage: "arrow.uturn.forward")
                 }
-                .tint(.orange)
+                .tint(Palette.gold)
             }
         }
         .swipeActions(edge: .leading) {
@@ -231,6 +231,7 @@ struct TodoEditView: View {
     @State private var hasTime: Bool
     @State private var remind: Bool
     @State private var category: String
+    @State private var showCalendar = false
     @FocusState private var titleFocused: Bool
 
     private let suggestions = ["约她吃饭", "订酒店", "买礼物", "准备生日惊喜", "回她消息", "去做检测", "买安全套"]
@@ -249,84 +250,143 @@ struct TodoEditView: View {
         _category = State(initialValue: todo?.category ?? "")
     }
 
+    private var currentGirls: [Girl] {
+        let list = girls.filter { $0.status.isCurrent }
+            .sorted { ($0.lastInteraction() ?? $0.createdAt) > ($1.lastInteraction() ?? $1.createdAt) }
+        if let id = girlID, let g = girls.first(where: { $0.id == id }), !list.contains(where: { $0.id == id }) {
+            return [g] + list
+        }
+        return list
+    }
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("要做什么", text: $title, axis: .vertical)
-                        .font(.body.weight(.medium))
-                        .focused($titleFocused)
-                        .accessibilityIdentifier("todoTitle")
-                    if title.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(suggestions, id: \.self) { s in
-                                    Button(s) { title = s }
-                                        .font(.footnote)
-                                        .buttonStyle(.bordered)
-                                        .buttonBorderShape(.capsule)
+        ComposerShell(title: todo == nil ? "新待办" : "编辑待办", canSave: !title.trimmed.isEmpty,
+                      saveIdentifier: "saveTodo",
+                      onCancel: { dismiss() }, onSave: save) {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("要做什么", text: $title, axis: .vertical)
+                    .font(Typo.display(24, weight: .medium))
+                    .focused($titleFocused)
+                    .accessibilityIdentifier("todoTitle")
+                if title.isEmpty {
+                    ChipRow {
+                        ForEach(suggestions, id: \.self) { s in
+                            ChoiceChip(title: s, selected: false) { title = s }
+                        }
+                    }
+                    .transition(.opacity)
+                }
+                TextField("备注", text: $notes, axis: .vertical)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1...4)
+            }
+
+            dateSection
+
+            if !currentGirls.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ComposerLabel("关于谁")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            ForEach(currentGirls) { g in
+                                QuickPickAvatar(girl: g, selected: girlID == g.id) {
+                                    withAnimation(.snappy(duration: 0.22)) {
+                                        girlID = girlID == g.id ? nil : g.id
+                                    }
                                 }
                             }
                         }
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .padding(.horizontal, 20)
                     }
-                    TextField("备注", text: $notes, axis: .vertical)
-                        .lineLimit(1...5)
-                }
-
-                Section {
-                    Picker("关联档案", selection: $girlID) {
-                        Text("无").tag(UUID?.none)
-                        ForEach(girls) { g in
-                            Text(g.name).tag(UUID?.some(g.id))
-                        }
-                    }
-                    OptionSinglePicker(title: "分类", key: .todoCategories, selection: $category)
-                }
-
-                Section {
-                    Toggle(isOn: $hasDate.animation(.snappy)) {
-                        Label("日期", systemImage: "calendar")
-                    }
-                    if hasDate {
-                        DatePicker("日期", selection: $date, displayedComponents: .date)
-                            .datePickerStyle(.graphical)
-                        Toggle(isOn: $hasTime.animation(.snappy)) {
-                            Label("具体时间", systemImage: "clock")
-                        }
-                        if hasTime {
-                            DatePicker("时间", selection: $date, displayedComponents: .hourAndMinute)
-                        }
-                        Toggle(isOn: $remind) {
-                            Label("提醒我", systemImage: "bell")
-                        }
-                    }
-                } footer: {
-                    if hasDate && remind && !Reminders.enabled {
-                        Text("提醒需要先在「设置 → 提醒」里开启通知。")
-                    } else if hasDate && remind && !hasTime {
-                        Text("没有具体时间时，当天早上 9 点提醒。")
-                    }
+                    .padding(.horizontal, -20)
                 }
             }
-            .formKeyboardHandling()
-            .navigationTitle(todo == nil ? "新待办" : "编辑待办")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+
+            VStack(alignment: .leading, spacing: 10) {
+                ComposerLabel("分类")
+                ChipRow {
+                    ForEach(config.options(.todoCategories), id: \.self) { c in
+                        ChoiceChip(title: c, selected: category == c) {
+                            category = category == c ? "" : c
+                        }
+                    }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
-                        .disabled(title.trimmed.isEmpty)
-                        .accessibilityIdentifier("saveTodo")
-                }
-            }
-            .onAppear {
-                if todo == nil { titleFocused = true }
             }
         }
-        .presentationDetents([.large])
+        .composerSheet(detents: [.large])
+        .onAppear {
+            if todo == nil { titleFocused = true }
+        }
+    }
+
+    private var dateSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ComposerLabel("时间")
+            ChipRow {
+                ChoiceChip(title: "不设", selected: !hasDate) {
+                    hasDate = false
+                    showCalendar = false
+                }
+                ForEach(QuickDay.allCases) { d in
+                    ChoiceChip(title: d.title, selected: hasDate && d.matches(date) && !showCalendar) {
+                        hasDate = true
+                        showCalendar = false
+                        date = merge(day: d.date, timeFrom: date)
+                    }
+                }
+                ChoiceChip(title: "选日期", symbol: "calendar", selected: hasDate && showCalendar) {
+                    hasDate = true
+                    showCalendar = true
+                }
+            }
+            if hasDate {
+                VStack(spacing: 0) {
+                    if showCalendar {
+                        DatePicker("日期", selection: $date, displayedComponents: .date)
+                            .datePickerStyle(.graphical)
+                            .labelsHidden()
+                            .padding(.bottom, 4)
+                    } else {
+                        HStack {
+                            Image(systemName: "calendar").foregroundStyle(.secondary)
+                            Text(TodoFormat.due(date, hasTime: false) + " · " + Fmt.shortDate(date))
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    Divider()
+                    Toggle(isOn: $hasTime.animation(.snappy)) {
+                        Label("具体时间", systemImage: "clock")
+                    }
+                    .padding(.vertical, 8)
+                    if hasTime {
+                        DatePicker("时间", selection: $date, displayedComponents: .hourAndMinute)
+                            .padding(.bottom, 8)
+                    }
+                    Divider()
+                    Toggle(isOn: $remind) {
+                        Label(remind && !hasTime ? "提醒我（当天 9:00）" : "提醒我", systemImage: "bell")
+                    }
+                    .padding(.vertical, 8)
+                }
+                .padding(.horizontal, 14)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(uiColor: .tertiarySystemFill)))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+
+                if remind && !Reminders.enabled {
+                    Text("提醒需要先在「设置 → 提醒」里开启通知。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func merge(day: Date, timeFrom: Date) -> Date {
+        let cal = Calendar.current
+        let t = cal.dateComponents([.hour, .minute], from: timeFrom)
+        return cal.date(bySettingHour: t.hour ?? 20, minute: t.minute ?? 0, second: 0, of: day) ?? day
     }
 
     private func save() {
@@ -345,7 +405,6 @@ struct TodoEditView: View {
         target.hasTime = hasDate && hasTime
         target.remind = hasDate && remind
         try? context.save()
-        Haptics.success()
         Reminders.scheduleTodo(target, girlName: girls.first { $0.id == girlID }?.name)
         dismiss()
     }
