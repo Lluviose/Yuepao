@@ -162,7 +162,13 @@ struct GirlEditView: View {
                     .fill(nameFocused ? Color.accentColor : Color.secondary.opacity(0.25))
                     .frame(width: nameFocused ? 120 : 72, height: nameFocused ? 2 : 1)
                     .animation(.snappy(duration: 0.25), value: nameFocused)
-                if isNew {
+                if let dup = duplicateName {
+                    Label("已经有一个叫「\(dup)」的档案了，换个代号更好区分", systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(Palette.fertile)
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity)
+                } else if isNew {
                     Text("代号会显示在列表和地图上，真名可以在「基本信息」里单独填")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -184,6 +190,13 @@ struct GirlEditView: View {
         .frame(maxWidth: .infinity)
         .background { identityBackground }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    /// 代号和别的档案重名
+    private var duplicateName: String? {
+        let name = draft.name.trimmed
+        guard !name.isEmpty, name != initialDraft.name.trimmed else { return nil }
+        return allGirls.contains { $0.id != girl?.id && $0.name.trimmed == name } ? name : nil
     }
 
     private var avatarPicker: some View {

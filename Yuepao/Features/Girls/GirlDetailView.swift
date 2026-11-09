@@ -15,6 +15,8 @@ struct GirlDetailView: View {
     @State private var confirmDelete = false
     @State private var editingTodo: TodoItem?
     @State private var contactPulse = 0
+    /// 点了「联系过」之后顶部短暂出现的提示
+    @State private var toast: String?
 
     enum DetailSheet: String, Identifiable {
         case edit, encounter, memo, said, gift, date, period, todo
@@ -59,6 +61,19 @@ struct GirlDetailView: View {
             }
         }
         .listSectionSpacing(.compact)
+        .overlay(alignment: .top) {
+            if let toast {
+                Label(toast, systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .floatingGlass(Capsule())
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .id(toast)
+            }
+        }
         .navigationTitle(girl.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -131,6 +146,15 @@ struct GirlDetailView: View {
         }
     }
 
+    private func showToast(_ text: String) {
+        withAnimation(.snappy) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            withAnimation(.smooth) {
+                if toast == text { toast = nil }
+            }
+        }
+    }
+
     private func delete(alsoEncounters: Bool) {
         dismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -170,6 +194,7 @@ struct GirlDetailView: View {
                         .accessibilityIdentifier("logEncounter")
                     QuickAction(title: "联系过", symbol: "bubble.left") {
                         withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
+                        showToast("已记下：今天联系过")
                     }
                     QuickAction(title: "待办", symbol: "checklist") { sheet = .todo }
                     QuickAction(title: "备忘", symbol: "square.and.pencil") { sheet = .memo }
@@ -624,12 +649,22 @@ struct GirlDetailView: View {
     }
 
     private var encounterSection: some View {
-        Section {
-            ForEach(girl.sortedEncounters) { e in
+        let all = girl.sortedEncounters
+        return Section {
+            ForEach(all.prefix(5)) { e in
                 NavigationLink {
                     EncounterDetailView(encounter: e)
                 } label: {
                     EncounterRow(encounter: e, showGirls: e.girls.count > 1)
+                }
+            }
+            if all.count > 5 {
+                NavigationLink {
+                    GirlEncountersView(girl: girl)
+                } label: {
+                    Text("查看全部 \(all.count) 次")
+                        .font(.subheadline)
+                        .foregroundStyle(.tint)
                 }
             }
             Button { sheet = .encounter } label: { Label("记一次", systemImage: "plus.circle") }
@@ -1007,6 +1042,46 @@ struct ImportantDateSheet: View {
             .composerField()
         }
         .composerSheet(detents: [.large])
+    }
+}
+
+/// 和她的全部记录，按月分组
+struct GirlEncountersView: View {
+    let girl: Girl
+
+    private var groups: [(month: Date, items: [Encounter])] {
+        let cal = Calendar.current
+        let grouped = Dictionary(grouping: girl.sortedEncounters) { e in
+            cal.date(from: cal.dateComponents([.year, .month], from: e.date)) ?? e.date
+        }
+        return grouped.keys.sorted(by: >).map { ($0, grouped[$0] ?? []) }
+    }
+
+    var body: some View {
+        List {
+            ForEach(groups, id: \.month) { group in
+                Section {
+                    ForEach(group.items) { e in
+                        NavigationLink {
+                            EncounterDetailView(encounter: e)
+                        } label: {
+                            EncounterRow(encounter: e, showGirls: e.girls.count > 1)
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text(Fmt.month(group.month))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text("\(group.items.count) 次 · \(group.items.reduce(0) { $0 + $1.count }) 回合")
+                            .statNumber()
+                    }
+                }
+            }
+        }
+        .navigationTitle("和\(girl.name)的记录")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

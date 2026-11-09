@@ -341,13 +341,43 @@ struct BackupPasswordSheet: View {
 // MARK: - 选项管理
 
 struct OptionListsView: View {
+    @ObservedObject private var config = ConfigStore.shared
+
+    private static let groups: [(title: String, keys: [OptionKey])] = [
+        ("档案", [.ranks, .channels, .personality, .tags, .bodyTypes, .cups, .maritalStatus, .education, .contactTypes]),
+        ("亲密", [.traits, .positions, .play, .toys, .outfits, .aftercare]),
+        ("记录", [.activities, .moods, .feedback, .expenseCategories]),
+        ("其他", [.giftOccasions, .todoCategories])
+    ]
+
+    /// 以后加了新选项、还没归类的，放到最后
+    private var ungrouped: [OptionKey] {
+        let grouped = Set(Self.groups.flatMap(\.keys))
+        return OptionKey.allCases.filter { !grouped.contains($0) }
+    }
+
     var body: some View {
-        List(OptionKey.allCases) { key in
-            NavigationLink(key.title) {
-                OptionEditView(key: key)
+        List {
+            ForEach(Self.groups, id: \.title) { group in
+                Section(group.title) {
+                    ForEach(group.keys) { key in row(key) }
+                }
+            }
+            if !ungrouped.isEmpty {
+                Section("更多") {
+                    ForEach(ungrouped) { key in row(key) }
+                }
             }
         }
         .navigationTitle("选项管理")
+    }
+
+    private func row(_ key: OptionKey) -> some View {
+        NavigationLink {
+            OptionEditView(key: key)
+        } label: {
+            LabeledContent(key.title, value: "\(config.options(key).count) 项")
+        }
     }
 }
 

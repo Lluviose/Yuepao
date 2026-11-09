@@ -288,7 +288,7 @@ struct MBTIPicker: View {
                 }
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chip)
         .accessibilityLabel("MBTI \(letter)")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -331,7 +331,7 @@ struct StatusPicker: View {
                     }
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chip)
                 .accessibilityIdentifier("status-\(s.rawValue)")
                 .accessibilityAddTraits(on ? .isSelected : [])
             }

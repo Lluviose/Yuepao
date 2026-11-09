@@ -257,6 +257,12 @@ struct EncounterEditView: View {
                     }
                 }
             }
+            if let hint = bondHint {
+                Label(hint.text, systemImage: hint.levelUp ? "sparkles" : "heart")
+                    .font(.footnote.weight(hint.levelUp ? .medium : .regular))
+                    .foregroundStyle(hint.levelUp ? Palette.gold : Color.secondary)
+                    .transition(.opacity)
+            }
             let hints = cycleHints
             if !hints.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -283,6 +289,18 @@ struct EncounterEditView: View {
                 .transition(.opacity)
             }
         }
+    }
+
+    /// 新记录只选了一个人时：这是和她的第几次，这次之后羁绊会不会升级
+    private var bondHint: (text: String, levelUp: Bool)? {
+        guard encounter == nil, girls.count == 1, let girl = girls.first else { return nil }
+        let n = girl.encounters.count + 1
+        let before = BondLevel(count: n - 1)
+        let after = BondLevel(count: n)
+        if after.level > before.level {
+            return ("和她的第 \(n) 次 · 保存后羁绊升到「\(after.title)」", true)
+        }
+        return ("和她的第 \(n) 次", false)
     }
 
     private func placeholderRow(_ text: String, symbol: String) -> some View {
@@ -357,6 +375,15 @@ struct EncounterEditView: View {
                 Spacer(minLength: 8)
                 DatePicker("开始时间", selection: $date)
                     .labelsHidden()
+            }
+            if encounter == nil {
+                ScrollChips {
+                    ForEach(TimePreset.allCases) { preset in
+                        ChoiceChip(title: preset.title, symbol: preset.symbol, selected: preset.matches(date)) {
+                            date = preset.date
+                        }
+                    }
+                }
             }
             VStack(alignment: .leading, spacing: 9) {
                 FieldLabel(title: "时长", value: durationMinutes > 0 ? Choices.durationTitle(durationMinutes) : nil)
@@ -444,14 +471,23 @@ struct EncounterEditView: View {
 
     // MARK: 玩法与道具
 
+    /// 只选了一个人时，她档案里的偏好（用来给选项标小红心）
+    private var herPreferences: GirlDetails? {
+        girls.count == 1 ? girls.first?.details : nil
+    }
+
     private var playCard: some View {
-        RecordCard("玩法与道具") {
+        let liked = herPreferences
+        return RecordCard("玩法与道具") {
             VStack(spacing: 0) {
-                TagDisclosure(title: "体位", symbol: "square.grid.2x2", key: .positions, selection: $details.positions)
+                TagDisclosure(title: "体位", symbol: "square.grid.2x2", key: .positions, selection: $details.positions,
+                              marked: Set(liked?.likedPositions ?? []))
                 RowDivider()
-                TagDisclosure(title: "玩法", symbol: "wand.and.stars", key: .play, selection: $details.play)
+                TagDisclosure(title: "玩法", symbol: "wand.and.stars", key: .play, selection: $details.play,
+                              marked: Set(liked?.likedPlay ?? []))
                 RowDivider()
-                TagDisclosure(title: "道具", symbol: "sparkles", key: .toys, selection: $details.toys)
+                TagDisclosure(title: "道具", symbol: "sparkles", key: .toys, selection: $details.toys,
+                              marked: Set(liked?.likedToys ?? []))
                 RowDivider()
                 TagDisclosure(title: "穿着", symbol: "tshirt", key: .outfits, selection: $details.outfits)
             }
@@ -499,7 +535,8 @@ struct EncounterEditView: View {
                 RowDivider()
                 TagDisclosure(title: "她的反馈", symbol: "text.bubble", key: .feedback, selection: $details.feedback)
                 RowDivider()
-                TagDisclosure(title: "事后照顾", symbol: "hands.sparkles", key: .aftercare, selection: $details.aftercare)
+                TagDisclosure(title: "事后照顾", symbol: "hands.sparkles", key: .aftercare, selection: $details.aftercare,
+                              marked: Set(herPreferences?.aftercareNeeds ?? []))
             }
         }
     }
@@ -724,7 +761,7 @@ struct QuickPickAvatar: View {
                     .frame(width: 54)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chip)
         .sensoryFeedback(.selection, trigger: selected)
         .accessibilityLabel(girl.name)
         .accessibilityAddTraits(selected ? .isSelected : [])

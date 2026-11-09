@@ -113,22 +113,31 @@ struct TagChip: View {
     let title: String
     let selected: Bool
     var tint: Color = .accentColor
+    /// 她档案里写着喜欢的：前面带一颗小红心
+    var marked = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.subheadline)
-                .lineLimit(1)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 7)
-                .foregroundStyle(selected ? tint : Color.primary.opacity(0.82))
-                .background(Capsule().fill(selected ? tint.opacity(0.14) : Color(uiColor: .tertiarySystemFill)))
-                .overlay(Capsule().strokeBorder(selected ? tint.opacity(0.6) : Palette.hairline,
-                                                lineWidth: selected ? 1 : 0.5))
-                .contentShape(Capsule())
+            HStack(spacing: 4) {
+                if marked {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.accentColor.opacity(selected ? 1 : 0.7))
+                }
+                Text(title)
+            }
+            .font(.subheadline)
+            .lineLimit(1)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .foregroundStyle(selected ? tint : Color.primary.opacity(0.82))
+            .background(Capsule().fill(selected ? tint.opacity(0.14) : Color(uiColor: .tertiarySystemFill)))
+            .overlay(Capsule().strokeBorder(selected ? tint.opacity(0.6) : Palette.hairline,
+                                            lineWidth: selected ? 1 : 0.5))
+            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chip)
         .sensoryFeedback(.selection, trigger: selected)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -139,6 +148,8 @@ struct TagCloud: View {
     let key: OptionKey
     @Binding var selection: [String]
     var tint: Color = .accentColor
+    /// 标上小红心的选项（她喜欢的）
+    var marked: Set<String> = []
 
     @ObservedObject private var config = ConfigStore.shared
     @State private var adding = false
@@ -181,7 +192,7 @@ struct TagCloud: View {
     }
 
     private func chip(_ option: String) -> some View {
-        TagChip(title: option, selected: selection.contains(option), tint: tint) {
+        TagChip(title: option, selected: selection.contains(option), tint: tint, marked: marked.contains(option)) {
             toggle(option)
         }
     }
@@ -202,7 +213,7 @@ struct TagCloud: View {
             .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chip)
         .accessibilityIdentifier("addOption-\(key.rawValue)")
     }
 
@@ -236,6 +247,7 @@ struct TagDisclosure: View {
     var tint: Color = .accentColor
     var note: String?
     var identifier: String?
+    var marked: Set<String> = []
 
     @State private var expanded = false
 
@@ -277,9 +289,13 @@ struct TagDisclosure: View {
 
             if expanded {
                 VStack(alignment: .leading, spacing: 12) {
-                    TagCloud(key: key, selection: $selection, tint: tint)
+                    TagCloud(key: key, selection: $selection, tint: tint, marked: marked)
                     if let note {
                         Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if !marked.isEmpty {
+                        Label("带小红心的是她档案里写着喜欢的", systemImage: "heart.fill")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -405,7 +421,7 @@ struct CounterTile: View {
                 .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 0.5))
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chip)
         .disabled(!enabled)
         .buttonRepeatBehavior(.enabled)
     }
@@ -439,7 +455,7 @@ struct IntensityPicker: View {
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chip)
                 .accessibilityLabel("强度\(level.title)")
                 .accessibilityAddTraits(current ? .isSelected : [])
                 .accessibilityIdentifier("intensity-\(level.rawValue)")
@@ -510,7 +526,7 @@ struct ProtectionPicker: View {
                         .strokeBorder(on ? p.color.opacity(0.55) : Color.clear, lineWidth: 1))
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chip)
                 .accessibilityLabel(p.title)
                 .accessibilityAddTraits(on ? .isSelected : [])
                 .accessibilityIdentifier("protection-\(p.rawValue)")
@@ -554,7 +570,7 @@ struct StarPicker: View {
                         .frame(width: size + 6, height: size + 6)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chip)
                 .accessibilityLabel("\(i) 星")
                 .accessibilityIdentifier("\(identifier)-\(i)")
             }

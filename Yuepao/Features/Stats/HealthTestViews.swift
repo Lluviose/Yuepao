@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct HealthTestListView: View {
-    @Query(sort: \HealthTest.date, order: .reverse) private var tests: [HealthTest]
+    @Query(sort: \HealthTest.date, order: .reverse, animation: .snappy) private var tests: [HealthTest]
     @Environment(\.modelContext) private var context
     @State private var editing: HealthTest?
     @State private var creating = false

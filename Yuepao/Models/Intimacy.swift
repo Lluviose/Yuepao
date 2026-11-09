@@ -73,3 +73,45 @@ enum OptionGroups {
         return result
     }
 }
+
+/// 记一次时的快捷开始时间：很多时候是事后补记
+enum TimePreset: String, CaseIterable, Identifiable {
+    case now, hourAgo, lastNight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .now: return "刚刚"
+        case .hourAgo: return "1 小时前"
+        case .lastNight: return "昨晚 10 点"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .now: return "clock"
+        case .hourAgo: return "clock.arrow.circlepath"
+        case .lastNight: return "moon"
+        }
+    }
+
+    var date: Date {
+        let now = Date()
+        switch self {
+        case .now:
+            return now
+        case .hourAgo:
+            return now.addingTimeInterval(-3600)
+        case .lastNight:
+            let cal = Calendar.current
+            let yesterday = cal.date(byAdding: .day, value: -1, to: now) ?? now
+            return cal.date(bySettingHour: 22, minute: 0, second: 0, of: yesterday) ?? yesterday
+        }
+    }
+
+    /// 选中的时间和这个快捷项相差不到 2 分钟就算选中
+    func matches(_ value: Date) -> Bool {
+        abs(value.timeIntervalSince(date)) < 120
+    }
+}

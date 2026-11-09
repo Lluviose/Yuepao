@@ -268,3 +268,19 @@ extension View {
             }
     }
 }
+
+/// 胶囊、选择块、计数按钮按下去时轻轻缩一下，松手弹回
+struct ChipPressStyle: ButtonStyle {
+    var scale: CGFloat = 0.94
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == ChipPressStyle {
+    static var chip: ChipPressStyle { ChipPressStyle() }
+}

@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct GirlListView: View {
-    @Query(sort: \Girl.createdAt, order: .reverse) private var girls: [Girl]
+    @Query(sort: \Girl.createdAt, order: .reverse, animation: .snappy) private var girls: [Girl]
     @Environment(\.modelContext) private var context
     @ObservedObject private var config = ConfigStore.shared
 
@@ -239,7 +239,7 @@ struct GirlRow: View {
             if d.contactGoalDays > 0 {
                 let last = girl.lastInteraction(details: d) ?? girl.createdAt
                 if Fmt.days(from: last) > d.contactGoalDays {
-                    items.append(("snowflake", .cyan, "被冷落"))
+                    items.append(("snowflake", RelationStatus.cooling.color, "被冷落"))
                 }
             }
         }

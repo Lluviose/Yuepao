@@ -2,22 +2,42 @@ import SwiftUI
 import SwiftData
 
 struct EncounterListView: View {
-    @Query(sort: \Encounter.date, order: .reverse) private var encounters: [Encounter]
+    @Query(sort: \Encounter.date, order: .reverse, animation: .snappy) private var encounters: [Encounter]
     @Environment(\.modelContext) private var context
 
     @State private var creating = false
     @State private var search = ""
     @State private var pendingDelete: Encounter?
     @State private var repeatFrom: Encounter?
+    @State private var editingRecord: Encounter?
+    /// 只看某个人的记录
+    @State private var girlFilter: UUID?
+
+    /// 有记录的人，按次数从多到少
+    private var people: [(girl: Girl, count: Int)] {
+        var counts: [UUID: (girl: Girl, count: Int)] = [:]
+        for e in encounters {
+            for g in e.girls {
+                counts[g.id, default: (girl: g, count: 0)].count += 1
+            }
+        }
+        return counts.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.girl.name < $1.girl.name }
+    }
 
     private var filtered: [Encounter] {
+        var list = encounters
+        // 筛选的人已经没有记录了（比如刚删掉），就当没筛选，免得卡在空列表
+        if let girlFilter, encounters.contains(where: { e in e.girls.contains { $0.id == girlFilter } }) {
+            list = list.filter { e in e.girls.contains { $0.id == girlFilter } }
+        }
         let q = search.trimmed
-        guard !q.isEmpty else { return encounters }
-        return encounters.filter { e in
+        guard !q.isEmpty else { return list }
+        return list.filter { e in
             e.girls.contains { $0.name.contains(q) }
                 || (e.place?.name.contains(q) ?? false)
                 || (e.place?.city.contains(q) ?? false)
                 || e.details.notes.contains(q)
+                || e.details.highlights.contains { $0.contains(q) }
         }
     }
 
@@ -32,6 +52,31 @@ struct EncounterListView: View {
     var body: some View {
         NavigationStack {
             List {
+                let list = people
+                if list.count >= 2 {
+                    Section {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                PersonFilterChip(girl: nil, count: encounters.count, selected: girlFilter == nil,
+                                                 dimmed: false) {
+                                    withAnimation(.snappy) { girlFilter = nil }
+                                }
+                                ForEach(list, id: \.girl.id) { item in
+                                    let on = girlFilter == item.girl.id
+                                    PersonFilterChip(girl: item.girl, count: item.count, selected: on,
+                                                     dimmed: girlFilter != nil && !on) {
+                                        withAnimation(.snappy) { girlFilter = on ? nil : item.girl.id }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 4)
+                        }
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .sensoryFeedback(.selection, trigger: girlFilter)
+                    }
+                }
                 ForEach(groups, id: \.month) { group in
                     Section {
                         ForEach(group.items) { e in
@@ -42,6 +87,24 @@ struct EncounterListView: View {
                             }
                             .swipeActions {
                                 Button("删除", role: .destructive) { pendingDelete = e }
+                            }
+                            .contextMenu {
+                                Button {
+                                    repeatFrom = e
+                                } label: {
+                                    Label("再记一次", systemImage: "arrow.clockwise.heart")
+                                }
+                                Button {
+                                    editingRecord = e
+                                } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                                Divider()
+                                Button(role: .destructive) {
+                                    pendingDelete = e
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
                             }
                             .swipeActions(edge: .leading) {
                                 Button {
@@ -93,6 +156,9 @@ struct EncounterListView: View {
             }
             .sheet(item: $repeatFrom) { e in
                 EncounterEditView(encounter: nil, presetGirls: e.girls, presetPlace: e.place)
+            }
+            .sheet(item: $editingRecord) { e in
+                EncounterEditView(encounter: e, presetGirls: [])
             }
             .confirmationDialog("删除这条记录？", isPresented: Binding(
                 get: { pendingDelete != nil },
@@ -189,6 +255,63 @@ struct EncounterRow: View {
                 }
             }
         }
+    }
+}
+
+/// 记录页顶部按人筛选：头像 + 次数，选中一个人时其余变淡
+struct PersonFilterChip: View {
+    /// nil 表示「全部」
+    let girl: Girl?
+    let count: Int
+    let selected: Bool
+    let dimmed: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Group {
+                    if let girl {
+                        AvatarView(photoID: girl.avatarID, name: girl.name, size: 44)
+                    } else {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 16))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                    }
+                }
+                .overlay {
+                    Circle()
+                        .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 2)
+                        .padding(-3)
+                }
+                .overlay(alignment: .topTrailing) {
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.6)))
+                        .overlay(Capsule().stroke(Color(uiColor: .systemGroupedBackground), lineWidth: 2))
+                        .offset(x: 6, y: -4)
+                }
+                Text(girl?.name ?? "全部")
+                    .font(.caption2.weight(selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+                    .frame(width: 54)
+            }
+            .opacity(dimmed ? 0.45 : 1)
+            .scaleEffect(dimmed ? 0.94 : 1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.chip)
+        .accessibilityLabel(girl.map { "只看\($0.name)" } ?? "全部记录")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(girl.map { "filter-\($0.name)" } ?? "filter-all")
     }
 }
 

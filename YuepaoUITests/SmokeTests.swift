@@ -146,6 +146,12 @@ final class SmokeTests: XCTestCase {
 
         // 记录详情 + 记一次表单（快速选人）
         tapTab(app, "记录")
+        let personFilter = app.buttons["filter-阿雪"].firstMatch
+        if personFilter.waitForExistence(timeout: 3) {
+            personFilter.tap()
+            sleep(1)
+            shot(app, "b1b-records-filter")
+        }
         let firstRecord = app.staticTexts["阿雪"].firstMatch
         if firstRecord.waitForExistence(timeout: 5) {
             firstRecord.tap()

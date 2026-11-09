@@ -81,6 +81,11 @@ struct EncounterDetailView: View {
         if encounter.girls.count == 1, let girl = encounter.girls.first {
             let n = ordinal(of: girl)
             tags.append(n == 1 ? HeroTag(symbol: "sparkles", text: "初次") : HeroTag(symbol: "heart", text: "第 \(n) 次"))
+            // 和上一次隔了几天
+            if let previous = girl.encounters.filter({ $0.date < encounter.date }).map(\.date).max() {
+                let gap = Fmt.days(from: previous, to: encounter.date)
+                tags.append(HeroTag(symbol: "clock.arrow.circlepath", text: gap == 0 ? "同一天第二次" : "隔 \(gap) 天"))
+            }
         }
         if encounter.overnight { tags.append(HeroTag(symbol: "moon", text: "过夜")) }
         if let intensity = Intensity.title(d.intensity) { tags.append(HeroTag(symbol: "flame", text: intensity)) }

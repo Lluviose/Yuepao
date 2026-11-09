@@ -34,6 +34,7 @@ struct StatsView: View {
             heatmapSection(stats)
             weekdaySection(stats)
             rankingSection(stats)
+            tasteSection(stats)
             channelSection(stats)
             safetySection(stats)
             spendingSection(stats)
@@ -217,6 +218,57 @@ struct StatsView: View {
             }
         } header: {
             Text("排行榜")
+        }
+    }
+
+    @ViewBuilder
+    private func tasteSection(_ s: StatsData) -> some View {
+        let taste = TasteStats(encounters: s.encounters)
+        if !taste.isEmpty {
+            Section {
+                tasteRows("体位", symbol: "square.grid.2x2", taste.positions)
+                tasteRows("玩法", symbol: "wand.and.stars", taste.play)
+                tasteRows("道具", symbol: "sparkles", taste.toys)
+                if taste.aftercare > 0 {
+                    InfoRow(label: "记了事后照顾", value: "\(taste.aftercare) / \(s.encounters.count) 次")
+                }
+            } header: {
+                Text("玩法偏好")
+            } footer: {
+                Text("按出现过的次数排，每类只列前五。")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tasteRows(_ title: String, symbol: String, _ entries: [TasteStats.Entry]) -> some View {
+        if !entries.isEmpty {
+            let most = max(entries.first?.count ?? 1, 1)
+            VStack(alignment: .leading, spacing: 8) {
+                Label(title, systemImage: symbol)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                ForEach(entries) { entry in
+                    HStack(spacing: 10) {
+                        Text(entry.name)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .frame(width: 76, alignment: .leading)
+                        GeometryReader { geo in
+                            Capsule()
+                                .fill(Color.accentColor.opacity(0.75))
+                                .frame(width: max(6, geo.size.width * CGFloat(entry.count) / CGFloat(most)))
+                        }
+                        .frame(height: 7)
+                        Text("\(entry.count)")
+                            .font(.footnote.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, alignment: .trailing)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 
@@ -535,4 +587,45 @@ struct StatsData {
         }
         .sorted { $0.days > $1.days }
     }
+}
+
+// MARK: - 玩法偏好
+
+/// 体位、玩法、道具各自出现在多少次约会里（取前五），以及记了事后照顾的次数
+struct TasteStats {
+    struct Entry: Identifiable {
+        let name: String
+        let count: Int
+        var id: String { name }
+    }
+
+    let positions: [Entry]
+    let play: [Entry]
+    let toys: [Entry]
+    let aftercare: Int
+
+    init(encounters: [Encounter]) {
+        var positionCount: [String: Int] = [:]
+        var playCount: [String: Int] = [:]
+        var toyCount: [String: Int] = [:]
+        var aftercare = 0
+        for e in encounters {
+            let d = e.details
+            for v in Set(d.positions) where !v.isEmpty { positionCount[v, default: 0] += 1 }
+            for v in Set(d.play) where !v.isEmpty { playCount[v, default: 0] += 1 }
+            for v in Set(d.toys) where !v.isEmpty { toyCount[v, default: 0] += 1 }
+            if !d.aftercare.isEmpty { aftercare += 1 }
+        }
+        func top(_ counts: [String: Int]) -> [Entry] {
+            counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                .prefix(5)
+                .map { Entry(name: $0.key, count: $0.value) }
+        }
+        positions = top(positionCount)
+        play = top(playCount)
+        toys = top(toyCount)
+        self.aftercare = aftercare
+    }
+
+    var isEmpty: Bool { positions.isEmpty && play.isEmpty && toys.isEmpty }
 }

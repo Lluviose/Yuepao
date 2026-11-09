@@ -31,7 +31,7 @@ struct ChoiceChip: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chip)
         .sensoryFeedback(.selection, trigger: selected)
     }
 }

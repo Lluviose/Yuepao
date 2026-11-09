@@ -163,9 +163,7 @@ enum GirlSort: String, CaseIterable, Identifiable {
 }
 
 enum Choices {
-    static let durations: [Int] = [0, 15, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720]
     static let contactGoals: [Int] = [0, 3, 5, 7, 10, 14, 21, 30, 60]
-    static let initiators: [String] = ["", "我", "她", "互相"]
     /// 谁主动约（单选，再点一次取消）
     static let initiatorChoices: [String] = ["我", "她", "互相"]
     /// 床上谁主导

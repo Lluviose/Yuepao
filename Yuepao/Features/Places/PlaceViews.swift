@@ -147,7 +147,7 @@ struct PlaceEditView: View {
                         .strokeBorder(on ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1))
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chip)
                 .accessibilityLabel(t.title)
                 .accessibilityAddTraits(on ? .isSelected : [])
                 .accessibilityIdentifier("placeType-\(t.rawValue)")
@@ -290,7 +290,7 @@ struct PlaceRow: View {
 // MARK: - 地点列表 / 详情
 
 struct PlaceListView: View {
-    @Query(sort: \Place.createdAt, order: .reverse) private var places: [Place]
+    @Query(sort: \Place.createdAt, order: .reverse, animation: .snappy) private var places: [Place]
     @Environment(\.modelContext) private var context
     @State private var creating = false
     @State private var pendingDelete: Place?
@@ -349,34 +349,90 @@ struct PlaceDetailView: View {
     let place: Place
 
     @State private var editing = false
+    @State private var openGirl: Girl?
+
+    /// 在这里见过的人和次数
+    private func visitors(_ encounters: [Encounter]) -> [(girl: Girl, count: Int)] {
+        var counts: [UUID: (girl: Girl, count: Int)] = [:]
+        for e in encounters {
+            for g in e.girls {
+                counts[g.id, default: (girl: g, count: 0)].count += 1
+            }
+        }
+        return counts.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.girl.name < $1.girl.name }
+    }
 
     var body: some View {
+        let encounters = place.encounters.sorted { $0.date > $1.date }
+        let people = visitors(encounters)
         List {
-            if let coordinate = place.coordinate {
-                Section {
-                    MiniMap(coordinate: coordinate, height: 180)
-                }
-            }
-
             Section {
-                InfoRow(label: "类型", value: place.type.title)
-                if !place.city.isEmpty || !place.district.isEmpty {
-                    InfoRow(label: "城市", value: [place.city, place.district].filter { !$0.isEmpty }.joined(separator: " "))
+                VStack(alignment: .leading, spacing: 16) {
+                    if let coordinate = place.coordinate {
+                        MiniMap(coordinate: coordinate, height: 170)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    HStack(spacing: 12) {
+                        IconBadge(symbol: place.type.symbol, color: .accentColor, size: 44)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(place.displayName)
+                                .font(Typo.display(22))
+                            Text([place.type.title, place.city, place.district].filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    MetricStrip(items: [
+                        MetricItem(label: "次数", value: "\(encounters.count)"),
+                        MetricItem(label: "见过", value: "\(people.count)", unit: "人"),
+                        MetricItem(label: "上次", value: place.lastUsed.map { Fmt.daysAgo($0) } ?? "—"),
+                        MetricItem(label: "评分", value: place.rating > 0 ? "\(place.rating)" : "—",
+                                   unit: place.rating > 0 ? "星" : "")
+                    ])
                 }
-                if !place.address.isEmpty { InfoRow(label: "地址", value: place.address) }
-                if place.rating > 0 {
-                    LabeledContent("评分") { StarDisplay(value: place.rating) }
-                }
-                InfoRow(label: "次数", value: "\(place.encounters.count) 次")
-                if let last = place.lastUsed {
-                    InfoRow(label: "上次", value: Fmt.daysAgo(last))
-                }
-                if !place.note.isEmpty { TextBlock(label: "备注", text: place.note) }
+                .padding(.vertical, 6)
             }
 
-            if !place.encounters.isEmpty {
+            if !place.address.isEmpty || !place.note.isEmpty {
+                Section {
+                    if !place.address.isEmpty { TextBlock(label: "地址", text: place.address) }
+                    if !place.note.isEmpty { TextBlock(label: "备注", text: place.note) }
+                }
+            }
+
+            if !people.isEmpty {
+                Section("在这里见过") {
+                    FlowLayout(spacing: 8) {
+                        ForEach(people, id: \.girl.id) { item in
+                            Button {
+                                openGirl = item.girl
+                            } label: {
+                                HStack(spacing: 7) {
+                                    AvatarView(photoID: item.girl.avatarID, name: item.girl.name, size: 26)
+                                    Text(item.girl.name)
+                                        .font(.subheadline)
+                                    Text("\(item.count)")
+                                        .font(.caption.weight(.semibold))
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.leading, 4)
+                                .padding(.trailing, 12)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color(uiColor: .tertiarySystemFill)))
+                                .contentShape(Capsule())
+                            }
+                            .buttonStyle(.chip)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            if !encounters.isEmpty {
                 Section("在这里的记录") {
-                    ForEach(place.encounters.sorted { $0.date > $1.date }) { e in
+                    ForEach(encounters) { e in
                         NavigationLink {
                             EncounterDetailView(encounter: e)
                         } label: {
@@ -388,6 +444,9 @@ struct PlaceDetailView: View {
         }
         .navigationTitle(place.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $openGirl) { girl in
+            GirlDetailView(girl: girl)
+        }
         .toolbar {
             Button("编辑") { editing = true }
         }
