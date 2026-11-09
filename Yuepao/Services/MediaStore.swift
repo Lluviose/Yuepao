@@ -192,7 +192,7 @@ final class MediaStore {
         var info = MediaInfo(kind: .photo, type: Self.imageType(source))
         Self.readImageProperties(source, into: &info)
         info.bytes = Int64(data.count)
-        let dir = staging ? stagingDirectory : nil
+        let dir: URL? = staging ? stagingDirectory : nil
         do {
             try writeChunked(data, to: url(id, .main, in: dir))
             try writeThumbnail(from: source, id: id, in: dir)
