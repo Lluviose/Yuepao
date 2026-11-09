@@ -116,6 +116,7 @@ struct HealthTestEditView: View {
         target.note = note
         target.nextDate = nextDate
         try? context.save()
+        AchievementCenter.shared.refresh(context: context)
         dismiss()
     }
 }

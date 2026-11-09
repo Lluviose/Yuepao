@@ -33,13 +33,23 @@ struct YuepaoApp: App {
 
 struct RootView: View {
     @ObservedObject private var lock = AppLock.shared
+    @ObservedObject private var achievements = AchievementCenter.shared
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var context
     @Query private var girls: [Girl]
     @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
 
     var body: some View {
         ZStack {
             MainTabView()
+            if let current = achievements.celebrating.first, !lock.isLocked {
+                CelebrationView(result: current) {
+                    achievements.dismissCelebration()
+                }
+                .id(current.id)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(1.5)
+            }
             if lock.isLocked {
                 LockScreen()
                     .transition(.opacity.combined(with: .scale(scale: 1.04)))
@@ -53,10 +63,12 @@ struct RootView: View {
             lock.handle(phase)
             if phase == .active {
                 Reminders.rescheduleDates(girls: girls)
+                achievements.refresh(context: context)
             }
         }
         .onAppear {
             if scenePhase == .active { lock.handle(.active) }
+            achievements.refresh(context: context)
         }
         .preferredColorScheme(AppearanceMode(rawValue: appearance)?.colorScheme)
     }
@@ -79,8 +91,8 @@ struct MainTabView: View {
             HaremMapScreen()
                 .tabItem { Label("地图", systemImage: "map.fill") }
                 .tag(3)
-            StatsView()
-                .tabItem { Label("统计", systemImage: "chart.bar.fill") }
+            HubView()
+                .tabItem { Label("成就", systemImage: "rosette") }
                 .tag(4)
         }
         .sensoryFeedback(.selection, trigger: tab)

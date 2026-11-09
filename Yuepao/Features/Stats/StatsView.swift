@@ -10,7 +10,6 @@ struct StatsView: View {
     @Environment(\.modelContext) private var context
 
     @State private var rankingMode: RankingMode = .count
-    @State private var showSettings = false
     @State private var chartsVisible = false
     @State private var selectedMonth: Date?
 
@@ -29,36 +28,21 @@ struct StatsView: View {
 
     var body: some View {
         let stats = StatsData(girls: girls, encounters: encounters)
-        NavigationStack {
-            List {
-                upcomingSection(stats)
-                overviewSection(stats)
-                monthlySection(stats)
-                heatmapSection(stats)
-                weekdaySection(stats)
-                rankingSection(stats)
-                channelSection(stats)
-                safetySection(stats)
-                spendingSection(stats)
-            }
-            .navigationTitle("统计")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("设置")
-                    .accessibilityIdentifier("openSettings")
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .onAppear {
-                withAnimation(.smooth(duration: 0.9).delay(0.1)) { chartsVisible = true }
-            }
+        List {
+            upcomingSection(stats)
+            overviewSection(stats)
+            monthlySection(stats)
+            heatmapSection(stats)
+            weekdaySection(stats)
+            rankingSection(stats)
+            channelSection(stats)
+            safetySection(stats)
+            spendingSection(stats)
+        }
+        .navigationTitle("统计")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            withAnimation(.smooth(duration: 0.9).delay(0.1)) { chartsVisible = true }
         }
     }
 

@@ -438,6 +438,7 @@ struct EncounterEditView: View {
 
         try? context.save()
         Haptics.success()
+        AchievementCenter.shared.refresh(context: context)
 
         if target.stiRisk || target.pregnancyRisk {
             Reminders.scheduleRiskFollowUps(encounterID: target.id, date: target.date)

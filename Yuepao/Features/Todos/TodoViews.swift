@@ -92,6 +92,7 @@ enum TodoActions {
             todo.doneAt = todo.isDone ? Date() : nil
         }
         try? context.save()
+        AchievementCenter.shared.refresh(context: context)
         if todo.isDone {
             Reminders.cancelTodo(id: todo.id)
         } else {

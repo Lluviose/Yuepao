@@ -99,10 +99,12 @@ struct GirlDetailView: View {
         case .said:
             NoteSheet(title: "她说过的事") { note in
                 girl.update { $0.saidNotes.append(note); $0.saidNotes.sort { $0.date > $1.date } }
+                AchievementCenter.shared.refresh(context: context)
             }
         case .gift:
             GiftSheet { gift in
                 girl.update { $0.gifts.append(gift); $0.gifts.sort { $0.date > $1.date } }
+                AchievementCenter.shared.refresh(context: context)
             }
         case .date:
             ImportantDateSheet { item in
@@ -214,6 +216,7 @@ struct GirlDetailView: View {
                 StatCell(value: "\(d.intimacy)", label: "亲密度")
             }
             .padding(.vertical, 4)
+            BondRow(bond: BondLevel(count: girl.encounters.count))
             if let first = girl.firstEncounterDate {
                 InfoRow(label: "第一次", value: Fmt.date(first))
             }
@@ -602,6 +605,50 @@ struct GirlDetailView: View {
                     InfoRow(label: f.name, value: d.customValues[f.id.uuidString] ?? "")
                 }
             }
+        }
+    }
+}
+
+/// 羁绊等级：见得越多，等级越高
+struct BondRow: View {
+    let bond: BondLevel
+
+    @State private var shown = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("羁绊")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("Lv.\(bond.level)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Palette.gold)
+                Text(bond.title)
+                    .font(Typo.display(17))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.12))
+                    Capsule()
+                        .fill(LinearGradient(colors: [Palette.gold.opacity(0.7), Palette.gold], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(5, geo.size.width * (shown ? bond.progress : 0)))
+                }
+            }
+            .frame(height: 5)
+            if let next = bond.nextCount, let title = bond.nextTitle {
+                Text("再见 \(next - bond.count) 次，升级为「\(title)」")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("已是最高羁绊")
+                    .font(.caption)
+                    .foregroundStyle(Palette.gold)
+            }
+        }
+        .padding(.vertical, 4)
+        .onAppear {
+            withAnimation(.smooth(duration: 0.9).delay(0.2)) { shown = true }
         }
     }
 }

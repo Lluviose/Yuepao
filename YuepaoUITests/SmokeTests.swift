@@ -73,7 +73,18 @@ final class SmokeTests: XCTestCase {
         save.tap()
 
         XCTAssertTrue(save.waitForNonExistence(timeout: 5))
-        sleep(1)
+
+        // 第一次记录会解锁成就，弹出庆祝
+        let celebrate = app.buttons["dismissCelebration"].firstMatch
+        XCTAssertTrue(celebrate.waitForExistence(timeout: 6))
+        sleep(2)
+        shot(app, "a6-celebration")
+        var dismissed = 0
+        while celebrate.waitForExistence(timeout: 2) && dismissed < 8 {
+            celebrate.tap()
+            dismissed += 1
+            sleep(1)
+        }
         shot(app, "a6-detail-after")
 
         // 记录页里应该出现这条记录
@@ -120,7 +131,7 @@ final class SmokeTests: XCTestCase {
         let app = makeApp(seed: true)
         app.launch()
 
-        let tabs = ["后宫", "记录", "日程", "地图", "统计"]
+        let tabs = ["后宫", "记录", "日程", "地图", "成就"]
         for (index, tab) in tabs.enumerated() {
             tapTab(app, tab)
             sleep(tab == "地图" ? 5 : 1)
@@ -152,11 +163,108 @@ final class SmokeTests: XCTestCase {
         }
         sleep(1)
 
-        // 统计往下翻
-        tapTab(app, "统计")
+        // 成就页往下翻
+        tapTab(app, "成就")
+        sleep(1)
         app.swipeUp()
         sleep(1)
-        shot(app, "b5-stats-more")
+        shot(app, "b5-hub-more")
+
+        // 完整统计
+        let stats = app.buttons["openStats"].firstMatch
+        if scrollTo(stats, in: app) {
+            stats.tap()
+            sleep(2)
+            shot(app, "b8-stats")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+
+        // 收藏：图鉴 / 印章 / 心愿 / 回顾
+        app.swipeDown()
+        app.swipeDown()
+        sleep(1)
+        let codex = app.buttons["codexCard"].firstMatch
+        if scrollTo(codex, in: app) {
+            codex.tap()
+            sleep(2)
+            shot(app, "i3-codex")
+            let codexSegments = app.segmentedControls.firstMatch
+            if codexSegments.waitForExistence(timeout: 3) {
+                codexSegments.buttons.element(boundBy: 2).tap()
+                sleep(1)
+                shot(app, "i3b-zodiac")
+            }
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+        let stamps = app.buttons["stampsCard"].firstMatch
+        if scrollTo(stamps, in: app) {
+            stamps.tap()
+            sleep(2)
+            shot(app, "i4-stamps")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+        let wishes = app.buttons["wishCard"].firstMatch
+        if scrollTo(wishes, in: app) {
+            wishes.tap()
+            sleep(2)
+            shot(app, "i5-wishes")
+            let addWish = app.buttons["addWish"].firstMatch
+            if addWish.waitForExistence(timeout: 3) {
+                addWish.tap()
+                sleep(1)
+                shot(app, "i5b-wish-composer")
+                app.buttons["取消"].firstMatch.tap()
+                sleep(1)
+            }
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+        let review = app.buttons["reviewCard"].firstMatch
+        if scrollTo(review, in: app) {
+            review.tap()
+            sleep(2)
+            shot(app, "j0-review-cover")
+            for page in 1...7 {
+                app.swipeLeft()
+                sleep(2)
+                if [1, 3, 5, 7].contains(page) { shot(app, "j\(page)-review") }
+            }
+            app.buttons["closeReview"].firstMatch.tap()
+            sleep(1)
+        }
+
+        // 成就馆
+        app.swipeDown()
+        app.swipeDown()
+        sleep(1)
+        let levelCard = app.buttons["levelCard"].firstMatch
+        if levelCard.waitForExistence(timeout: 3) {
+            levelCard.tap()
+            sleep(2)
+            shot(app, "i1-achievements")
+            app.swipeUp()
+            sleep(1)
+            shot(app, "i1b-achievements-more")
+            let medal = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label CONTAINS '初试云雨'")).firstMatch
+            if medal.waitForExistence(timeout: 3) {
+                app.swipeDown()
+                sleep(1)
+                if medal.isHittable {
+                    medal.tap()
+                    sleep(2)
+                    shot(app, "i2-achievement-detail")
+                    let close = app.buttons["closeAchievement"].firstMatch
+                    if close.waitForExistence(timeout: 3) { close.tap() }
+                    sleep(1)
+                }
+            }
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
 
         // 设置
         let settings = app.buttons["openSettings"].firstMatch
@@ -227,7 +335,7 @@ final class SmokeTests: XCTestCase {
     func testDarkMode() {
         let app = makeApp(seed: true, dark: true)
         app.launch()
-        for (index, tab) in ["后宫", "日程", "统计"].enumerated() {
+        for (index, tab) in ["后宫", "日程", "成就"].enumerated() {
             tapTab(app, tab)
             sleep(1)
             shot(app, "f\(index)-dark")

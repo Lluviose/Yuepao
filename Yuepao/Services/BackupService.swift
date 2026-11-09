@@ -18,6 +18,19 @@ struct BackupFile: Codable {
     var photos: [String: Data]
     /// 0.2 起才有，旧备份里没有
     var todos: [TodoRecord]?
+    /// 0.3 起才有
+    var wishes: [WishRecord]?
+}
+
+struct WishRecord: Codable {
+    var id: UUID
+    var createdAt: Date
+    var title: String
+    var kind: String
+    var note: String
+    var girlID: UUID?
+    var isDone: Bool
+    var doneAt: Date?
 }
 
 struct TodoRecord: Codable {
@@ -107,6 +120,7 @@ enum BackupService {
         let encounters = try context.fetch(FetchDescriptor<Encounter>())
         let tests = try context.fetch(FetchDescriptor<HealthTest>())
         let todos = try context.fetch(FetchDescriptor<TodoItem>())
+        let wishes = try context.fetch(FetchDescriptor<WishItem>())
 
         var photos: [String: Data] = [:]
         for id in PhotoStore.shared.allIDs() {
@@ -140,6 +154,10 @@ enum BackupService {
                 TodoRecord(id: $0.id, createdAt: $0.createdAt, title: $0.title, notes: $0.notes, dueDate: $0.dueDate,
                            hasTime: $0.hasTime, remind: $0.remind, isDone: $0.isDone, doneAt: $0.doneAt,
                            girlID: $0.girlID, category: $0.category)
+            },
+            wishes: wishes.map {
+                WishRecord(id: $0.id, createdAt: $0.createdAt, title: $0.title, kind: $0.kind, note: $0.note,
+                           girlID: $0.girlID, isDone: $0.isDone, doneAt: $0.doneAt)
             }
         )
 
@@ -239,6 +257,18 @@ enum BackupService {
             t.category = r.category
         }
 
+        for r in file.wishes ?? [] {
+            let w = WishItem(title: r.title)
+            context.insert(w)
+            w.id = r.id
+            w.createdAt = r.createdAt
+            w.kind = r.kind
+            w.note = r.note
+            w.girlID = r.girlID
+            w.isDone = r.isDone
+            w.doneAt = r.doneAt
+        }
+
         try context.save()
         ConfigStore.shared.config = file.config
     }
@@ -250,6 +280,7 @@ enum BackupService {
         for p in try context.fetch(FetchDescriptor<Place>()) { context.delete(p) }
         for t in try context.fetch(FetchDescriptor<HealthTest>()) { context.delete(t) }
         for t in try context.fetch(FetchDescriptor<TodoItem>()) { context.delete(t) }
+        for w in try context.fetch(FetchDescriptor<WishItem>()) { context.delete(w) }
         try context.save()
         PhotoStore.shared.deleteAll()
     }

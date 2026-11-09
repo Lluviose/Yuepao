@@ -114,6 +114,25 @@ final class TodoItem {
     }
 }
 
+// MARK: - 心愿清单
+
+@Model
+final class WishItem {
+    var id: UUID = UUID()
+    var createdAt: Date = Date()
+    var title: String = ""
+    /// 玩法 / 地点 / 体验 / 其他
+    var kind: String = ""
+    var note: String = ""
+    var girlID: UUID?
+    var isDone: Bool = false
+    var doneAt: Date?
+
+    init(title: String = "") {
+        self.title = title
+    }
+}
+
 // MARK: - Convenience
 
 extension Girl {

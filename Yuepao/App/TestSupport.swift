@@ -52,6 +52,7 @@ enum TestSupport {
             d.contactGoalDays = 5
         }
         let xue = makeGirl("阿雪", .active, "固定", "上海", 31.2200, 121.5440) { d in
+            d.birthday = cal.date(from: DateComponents(year: 1999, month: 3, day: 28))
             d.channel = "Soul"; d.metDate = daysAgo(90, hour: 20); d.ratingOverall = 7; d.intimacy = 60
             d.occupation = "护士"; d.contactGoalDays = 7
         }
@@ -59,6 +60,7 @@ enum TestSupport {
             d.channel = "酒吧 / 夜店"; d.metDate = daysAgo(8, hour: 23); d.intimacy = 30
         }
         let yu = makeGirl("小雨", .active, "偶尔", "北京", 39.9087, 116.3975) { d in
+            d.birthday = cal.date(from: DateComponents(year: 2000, month: 8, day: 2))
             d.channel = "朋友介绍"; d.ratingOverall = 8; d.intimacy = 55
         }
 
@@ -85,6 +87,8 @@ enum TestSupport {
             (xue, hotel, 33, 19, .condom), (xue, hotel, 60, 21, .condom), (yu, bjHotel, 20, 23, .condom),
             (yu, bjHotel, 95, 22, .condom), (mei, hotel, 120, 21, .condom)
         ]
+        let positionSets: [[String]] = [["传教士", "后入"], ["女上", "传教士"], ["后入", "侧入"], ["女上"]]
+        let playSets: [[String]] = [[], ["制服"], [], ["玩具", "镜子"]]
         for (i, item) in plan.enumerated() {
             let e = Encounter(date: daysAgo(item.2, hour: item.3))
             context.insert(e)
@@ -92,8 +96,12 @@ enum TestSupport {
             e.durationMinutes = [60, 90, 120][i % 3]
             e.protection = item.4
             e.rating = 3 + i % 3
+            e.overnight = i % 4 == 0
             var d = EncounterDetails()
-            d.positions = ["传教士", "后入"]
+            d.positions = positionSets[i % positionSets.count]
+            d.play = playSets[i % playSets.count]
+            d.herOrgasms = i % 2 == 0 ? 1 : -1
+            d.chemistry = i == 4 ? 5 : 3
             d.expenses = [ExpenseItem(category: "酒店", amount: item.1.type == .hotel ? 680 : 0),
                           ExpenseItem(category: "餐饮", amount: 200)]
                 .filter { $0.amount > 0 }
@@ -103,6 +111,33 @@ enum TestSupport {
             e.girls = [item.0]
         }
         _ = lily
+
+        // 一次两个人的约会
+        let group = Encounter(date: daysAgo(9, hour: 23))
+        context.insert(group)
+        group.count = 2
+        group.protection = .condom
+        group.rating = 5
+        group.place = hotel
+        group.girls = [mei, xue]
+
+        let test = HealthTest(date: daysAgo(12, hour: 10))
+        context.insert(test)
+        test.items = "HIV、梅毒、淋病、衣原体"
+        test.result = "阴性"
+
+        let wishPlan: [(String, String, Girl?, Bool)] = [
+            ("海边酒店", "地点", mei, true), ("温泉之夜", "体验", mei, false),
+            ("制服", "玩法", xue, false), ("一起旅行", "体验", nil, false), ("跨年夜", "体验", nil, false)
+        ]
+        for w in wishPlan {
+            let item = WishItem(title: w.0)
+            context.insert(item)
+            item.kind = w.1
+            item.girlID = w.2?.id
+            item.isDone = w.3
+            item.doneAt = w.3 ? daysAgo(18, hour: 22) : nil
+        }
 
         let todoPlan: [(String, Int?, Girl?, Bool)] = [
             ("给小美准备生日礼物", 10, mei, false),

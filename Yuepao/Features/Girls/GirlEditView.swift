@@ -412,6 +412,7 @@ struct GirlEditView: View {
 
         try? context.save()
         Haptics.success()
+        AchievementCenter.shared.refresh(context: context)
         Reminders.rescheduleDates(girls: isNew ? allGirls + [target] : allGirls)
         dismiss()
     }
