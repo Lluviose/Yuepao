@@ -25,8 +25,15 @@ struct EncounterDetailView: View {
                     NavigationLink {
                         PlaceDetailView(place: place)
                     } label: {
-                        LabeledContent("地点") {
-                            Label(place.displayName, systemImage: place.type.symbol)
+                        HStack {
+                            Text("地点")
+                            Spacer()
+                            Image(systemName: place.type.symbol)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(place.displayName)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
                 }
@@ -61,10 +68,14 @@ struct EncounterDetailView: View {
             }
 
             Section("安全") {
-                LabeledContent("措施") {
-                    Label(encounter.protection.title, systemImage: encounter.protection.symbol)
-                        .foregroundStyle(encounter.protection.color)
+                HStack {
+                    Text("措施")
+                    Spacer()
+                    Image(systemName: encounter.protection.symbol)
+                        .font(.subheadline)
+                    Text(encounter.protection.title)
                 }
+                .foregroundStyle(encounter.protection.color)
                 if encounter.condomBroke { InfoRow(label: "破套", value: "是") }
                 if encounter.pregnancyRisk {
                     InfoRow(label: "紧急避孕药", value: d.pillTaken ? "已吃" : "未记录")
