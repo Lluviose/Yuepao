@@ -280,7 +280,7 @@ struct HaremMapScreen: View {
             LazyHStack(spacing: 10) {
                 ForEach(cards, id: \.self) { f in
                     card(for: f)
-                        .containerRelativeFrame(.horizontal) { width, _ in width - 52 }
+                        .containerRelativeFrame(.horizontal) { width, _ in width - 16 }
                 }
             }
             .scrollTargetLayout()

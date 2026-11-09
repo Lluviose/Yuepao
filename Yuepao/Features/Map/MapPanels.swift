@@ -211,6 +211,8 @@ private struct CardButton: View {
             Label(title, systemImage: symbol)
                 .labelStyle(.titleAndIcon)
                 .font(.footnote.weight(.semibold))
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .foregroundStyle(prominent ? Color.white : Color.primary)
@@ -218,6 +220,46 @@ private struct CardButton: View {
                             in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// 卡片顶部：点这里打开详情（整张卡不做点击，免得左右滑动时误触）
+private struct CardHeader<Leading: View, Trailing: View>: View {
+    let title: String
+    let subtitle: String
+    var badge: String?
+    let onOpen: () -> Void
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onOpen) {
+                HStack(spacing: 12) {
+                    leading()
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text(title)
+                                .font(Typo.display(19))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            if let badge { Badge(text: badge) }
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            trailing()
+        }
     }
 }
 
@@ -230,26 +272,13 @@ struct GirlMapCard: View {
     var body: some View {
         let details = girl.details
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
+            CardHeader(title: girl.name, subtitle: subtitle, badge: girl.rank.isEmpty ? nil : girl.rank, onOpen: onOpen) {
                 AvatarView(photoID: girl.avatarID, name: girl.name, size: 48, ring: girl.status.color)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(girl.name)
-                            .font(Typo.display(19))
-                            .lineLimit(1)
-                        if !girl.rank.isEmpty { Badge(text: girl.rank) }
-                    }
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+            } trailing: {
+                EmptyView()
             }
-            HStack(alignment: .bottom, spacing: 18) {
+            .accessibilityIdentifier("mapCardOpen")
+            HStack(alignment: .bottom, spacing: 16) {
                 CardMetric(value: "\(girl.encounters.count) 次", caption: "一起")
                 CardMetric(value: Fmt.daysAgo(girl.lastInteraction(details: details)), caption: "上次")
                 cycleMetric(details)
@@ -260,9 +289,8 @@ struct GirlMapCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .floatingGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .onTapGesture(perform: onOpen)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mapCard-\(girl.name)")
     }
 
@@ -298,53 +326,41 @@ struct PlaceMapCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
+            CardHeader(title: place.displayName, subtitle: subtitle, onOpen: onOpen) {
                 Image(systemName: place.type.symbol)
                     .font(.system(size: 19, weight: .regular))
                     .foregroundStyle(.tint)
                     .frame(width: 48, height: 48)
                     .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(place.displayName)
-                        .font(Typo.display(19))
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            } trailing: {
+                Button(action: onNavigate) {
+                    Image(systemName: "arrow.triangle.turn.up.right.diamond")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.primary.opacity(0.08), in: Circle())
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                .buttonStyle(.plain)
+                .accessibilityLabel("导航")
             }
             HStack(alignment: .bottom, spacing: 16) {
                 CardMetric(value: "\(count) 次", caption: "在这里")
                 CardMetric(value: Fmt.daysAgo(place.lastUsed), caption: "上次")
                 peopleStack
                 Spacer(minLength: 0)
-                Button(action: onNavigate) {
-                    Image(systemName: "arrow.triangle.turn.up.right.diamond")
-                        .font(.footnote.weight(.semibold))
-                        .frame(width: 34, height: 34)
-                        .background(Color.primary.opacity(0.08), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("导航")
                 CardButton(title: "记一次", symbol: "plus", prominent: true, action: onRecord)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .floatingGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .onTapGesture(perform: onOpen)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mapCard-\(place.displayName)")
     }
 
     private var subtitle: String {
         var parts = [place.type.title]
-        let area = [place.city, place.district].filter { !$0.isEmpty }.joined(separator: " ")
+        let area = place.district.isEmpty ? place.city : place.district
         if !area.isEmpty { parts.append(area) }
         if let distance { parts.append("距你 " + MapFormat.distance(distance)) }
         return parts.joined(separator: " · ")

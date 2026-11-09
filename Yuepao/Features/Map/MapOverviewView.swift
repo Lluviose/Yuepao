@@ -176,10 +176,10 @@ struct MapOverviewView: View {
                 Text("次")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Image(systemName: "location.north.circle")
-                    .font(.footnote)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                    .padding(.leading, 4)
+                    .padding(.leading, 6)
             }
             ProgressView(value: fraction)
                 .tint(Color.accentColor)

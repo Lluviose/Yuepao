@@ -343,6 +343,15 @@ final class SmokeTests: XCTestCase {
         }
     }
 
+    /// 万一弹出了详情之类的页面，往下拖关掉，回到地图
+    private func dismissSheetIfNeeded(_ app: XCUIApplication) {
+        let bar = app.navigationBars.firstMatch
+        if bar.exists {
+            bar.swipeDown(velocity: .fast)
+            sleep(1)
+        }
+    }
+
     func testMapModule() {
         let app = makeApp(seed: true)
         app.launch()
@@ -371,17 +380,22 @@ final class SmokeTests: XCTestCase {
             pin.tap()
             sleep(2)
             shot(app, "k4-focus")
+            // 在卡片下半部（指标区，不是按钮）往左拖，切到下一张
             let card = app.descendants(matching: .any)["mapCard-小美"].firstMatch
             if card.waitForExistence(timeout: 3) {
-                card.swipeLeft()
+                let start = card.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.78))
+                let end = card.coordinate(withNormalizedOffset: CGVector(dx: -0.55, dy: 0.78))
+                start.press(forDuration: 0.1, thenDragTo: end)
                 sleep(2)
                 shot(app, "k5-next-card")
             }
+            dismissSheetIfNeeded(app)
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.3)).tap()
             sleep(1)
         }
 
         // 地点和热力
+        dismissSheetIfNeeded(app)
         app.buttons["mapMode-places"].firstMatch.tap()
         sleep(2)
         shot(app, "k6-places")
@@ -399,7 +413,10 @@ final class SmokeTests: XCTestCase {
             shot(app, "k8-playback")
             sleep(9)
             shot(app, "k9-playback-end")
-            app.buttons["playbackClose"].firstMatch.tap()
+            let close = app.buttons["playbackClose"].firstMatch
+            if close.waitForExistence(timeout: 3) {
+                close.tap()
+            }
             sleep(2)
         }
 

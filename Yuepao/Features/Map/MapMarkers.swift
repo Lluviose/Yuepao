@@ -273,7 +273,10 @@ enum MarkerRenderer {
         return RenderedMarker(image: image, offset: CGPoint(x: 0, y: height / 2 - tip.y))
     }
 
-    // MARK: 地点：胶囊 = 类型图标 + 次数
+    // MARK: 地点：挂在坐标下方的胶囊 = 类型图标 + 次数，顶上的小尖角指着位置
+
+    /// 人的头像在坐标上方、地点胶囊在坐标下方，同一个位置也不会互相挡住
+    private static let caretH: CGFloat = 5
 
     private static func drawSpot(_ item: MapSpot, selected: Bool) -> RenderedMarker {
         let h: CGFloat = selected ? 32 : 28
@@ -284,25 +287,31 @@ enum MarkerRenderer {
         let textSize = text.size(withAttributes: [.font: font])
         let glyphW = glyph?.size.width ?? 0
         let w = max(10 + glyphW + 5 + ceil(textSize.width) + 11, h + 6)
-        let size = CGSize(width: w + pad * 2, height: h + pad * 2)
-        let pill = CGRect(x: pad, y: pad, width: w, height: h)
+        let size = CGSize(width: w + pad * 2, height: caretH + h + pad * 2)
+        let tip = CGPoint(x: size.width / 2, y: pad)
+        let pill = CGRect(x: pad, y: pad + caretH, width: w, height: h)
+        let fill = selected ? Palette.wineUI : surface
 
         let image = UIGraphicsImageRenderer(size: size).image { ctx in
             withShadow(ctx.cgContext) {
-                (selected ? Palette.wineUI : surface).setFill()
+                fill.setFill()
                 UIBezierPath(roundedRect: pill, cornerRadius: h / 2).fill()
+                caret(base: pill.minY + 1, tip: tip).fill()
             }
             if !selected {
                 UIColor.separator.withAlphaComponent(0.35).setStroke()
                 let border = UIBezierPath(roundedRect: pill.insetBy(dx: 0.25, dy: 0.25), cornerRadius: h / 2)
                 border.lineWidth = 0.5
                 border.stroke()
+                // 盖住尖角根部的描边，让尖角和胶囊连成一体
+                fill.setFill()
+                UIBezierPath(rect: CGRect(x: tip.x - 4.5, y: pill.minY - 0.5, width: 9, height: 1.5)).fill()
             }
             glyph?.draw(at: CGPoint(x: pill.minX + 10, y: pill.midY - (glyph?.size.height ?? 0) / 2))
             text.draw(at: CGPoint(x: pill.minX + 10 + glyphW + 5, y: pill.midY - textSize.height / 2),
                       withAttributes: [.font: font, .foregroundColor: selected ? UIColor.white : UIColor.label])
         }
-        return RenderedMarker(image: image, offset: .zero)
+        return RenderedMarker(image: image, offset: CGPoint(x: 0, y: size.height / 2 - tip.y))
     }
 
     // MARK: 人的聚合：叠在一起的头像 + 人数名牌
@@ -356,7 +365,7 @@ enum MarkerRenderer {
         return RenderedMarker(image: image, offset: CGPoint(x: 0, y: height / 2 - tip.y))
     }
 
-    // MARK: 地点的聚合：叠起来的胶囊 = 总次数 · 几处
+    // MARK: 地点的聚合：叠起来的胶囊 = 总次数 · 几处，同样挂在坐标下方
 
     private static func drawSpotCluster(_ members: [MapSpot]) -> RenderedMarker {
         let h: CGFloat = 30
@@ -370,8 +379,9 @@ enum MarkerRenderer {
         let glyphW = glyph?.size.width ?? 0
         let w = 10 + glyphW + 5 + ceil(totalSize.width) + ceil(placesSize.width) + 12
         let stackOffset: CGFloat = 4
-        let size = CGSize(width: w + pad * 2, height: h + stackOffset + pad * 2)
-        let pill = CGRect(x: pad, y: pad, width: w, height: h)
+        let size = CGSize(width: w + pad * 2, height: caretH + h + stackOffset + pad * 2)
+        let tip = CGPoint(x: size.width / 2, y: pad)
+        let pill = CGRect(x: pad, y: pad + caretH, width: w, height: h)
         let back = pill.insetBy(dx: 7, dy: 0).offsetBy(dx: 0, dy: stackOffset)
 
         let image = UIGraphicsImageRenderer(size: size).image { ctx in
@@ -384,11 +394,14 @@ enum MarkerRenderer {
             withShadow(ctx.cgContext) {
                 surface.setFill()
                 UIBezierPath(roundedRect: pill, cornerRadius: h / 2).fill()
+                caret(base: pill.minY + 1, tip: tip).fill()
             }
             UIColor.separator.withAlphaComponent(0.35).setStroke()
             let border = UIBezierPath(roundedRect: pill.insetBy(dx: 0.25, dy: 0.25), cornerRadius: h / 2)
             border.lineWidth = 0.5
             border.stroke()
+            surface.setFill()
+            UIBezierPath(rect: CGRect(x: tip.x - 4.5, y: pill.minY - 0.5, width: 9, height: 1.5)).fill()
 
             var x = pill.minX + 10
             glyph?.draw(at: CGPoint(x: x, y: pill.midY - (glyph?.size.height ?? 0) / 2))
@@ -399,7 +412,7 @@ enum MarkerRenderer {
             places.draw(at: CGPoint(x: x, y: pill.midY - placesSize.height / 2 + 0.5),
                         withAttributes: [.font: smallFont, .foregroundColor: UIColor.secondaryLabel])
         }
-        return RenderedMarker(image: image, offset: CGPoint(x: 0, y: stackOffset / 2))
+        return RenderedMarker(image: image, offset: CGPoint(x: 0, y: size.height / 2 - tip.y))
     }
 
     // MARK: 小工具
@@ -411,6 +424,16 @@ enum MarkerRenderer {
         draw()
         cg.endTransparencyLayer()
         cg.restoreGState()
+    }
+
+    /// 朝上的小尖角（地点胶囊用）
+    private static func caret(base: CGFloat, tip: CGPoint) -> UIBezierPath {
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: tip.x - 5.5, y: base))
+        path.addLine(to: tip)
+        path.addLine(to: CGPoint(x: tip.x + 5.5, y: base))
+        path.close()
+        return path
     }
 
     /// 顺时针画的小三角，和名牌连成一体
