@@ -524,10 +524,10 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .standard: return "手账"
-        case .dark: return "深色"
-        case .minimal: return "极简"
-        case .list: return "清单"
+        case .standard: return "酒红"
+        case .dark: return "墨黑"
+        case .minimal: return "象牙"
+        case .list: return "夜蓝"
         }
     }
 

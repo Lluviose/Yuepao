@@ -25,9 +25,14 @@ enum Palette {
         ((0.78, 0.76, 0.73), (0.56, 0.54, 0.51))    // 暖灰
     ]
 
+    /// FNV-1a 哈希，让相似的名字（比如「小美」「小雨」）也能分到不同色调
     private static func tone(for name: String) -> (top: (Double, Double, Double), bottom: (Double, Double, Double)) {
-        let sum = name.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
-        return avatarTones[abs(sum) % avatarTones.count]
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in name.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        return avatarTones[Int(hash % UInt64(avatarTones.count))]
     }
 
     static func avatarGradient(for name: String) -> LinearGradient {
@@ -132,7 +137,7 @@ struct QuickAction: View {
                     .overlay(Circle().stroke(Palette.hairline, lineWidth: 0.5))
                 Text(title)
                     .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
             }
             .frame(maxWidth: .infinity)
         }
