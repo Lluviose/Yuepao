@@ -38,7 +38,12 @@ final class DraftAnnotation: NSObject, MKAnnotation {
 // MARK: - Annotation views
 
 /// 所有自绘标记的基类：深浅色切换时重画，选中时轻轻弹一下
+///
+/// 图片放在子视图里，动画只缩放子视图：标记视图本身的大小不变，
+/// 否则 MapKit 会按缩小后的尺寸判断碰撞，该合并的标记就合并不了。
 class MarkerView: MKAnnotationView {
+    let markerImageView = UIImageView()
+
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         collisionMode = .circle
@@ -46,6 +51,8 @@ class MarkerView: MKAnnotationView {
         canShowCallout = false
         isAccessibilityElement = true
         accessibilityTraits = .button
+        markerImageView.isUserInteractionEnabled = false
+        addSubview(markerImageView)
         registerForTraitChanges([UITraitUserInterfaceStyle.self], action: #selector(styleDidChange))
     }
 
@@ -57,7 +64,8 @@ class MarkerView: MKAnnotationView {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        transform = .identity
+        markerImageView.layer.removeAllAnimations()
+        markerImageView.transform = .identity
     }
 
     override func prepareForDisplay() {
@@ -68,6 +76,15 @@ class MarkerView: MKAnnotationView {
     /// 子类在这里画图
     func configure() {}
 
+    func apply(_ marker: RenderedMarker) {
+        let size = marker.image.size
+        markerImageView.image = marker.image
+        bounds = CGRect(origin: .zero, size: size)
+        markerImageView.bounds = CGRect(origin: .zero, size: size)
+        markerImageView.center = CGPoint(x: size.width / 2, y: size.height / 2)
+        centerOffset = marker.offset
+    }
+
     override func setSelected(_ selected: Bool, animated: Bool) {
         let changed = selected != isSelected
         super.setSelected(selected, animated: animated)
@@ -77,21 +94,32 @@ class MarkerView: MKAnnotationView {
     }
 
     func pop() {
-        transform = CGAffineTransform(scaleX: 0.84, y: 0.84)
+        markerImageView.transform = CGAffineTransform(scaleX: 0.84, y: 0.84)
         UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.8,
                        options: [.allowUserInteraction, .beginFromCurrentState]) {
-            self.transform = .identity
+            self.markerImageView.transform = .identity
+        }
+    }
+
+    /// 新出现时从小放大
+    func appear(delay: TimeInterval, alpha target: CGFloat) {
+        alpha = 0
+        markerImageView.transform = CGAffineTransform(scaleX: 0.3, y: 0.3)
+        UIView.animate(withDuration: 0.55, delay: delay, usingSpringWithDamping: 0.62, initialSpringVelocity: 0.6,
+                       options: [.allowUserInteraction]) {
+            self.alpha = target
+            self.markerImageView.transform = .identity
         }
     }
 
     /// 数字变化时跳一下（回放时用）
     func pulse() {
         UIView.animate(withDuration: 0.12, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
-            self.transform = CGAffineTransform(scaleX: 1.22, y: 1.22)
+            self.markerImageView.transform = CGAffineTransform(scaleX: 1.22, y: 1.22)
         } completion: { _ in
             UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.6,
                            options: [.allowUserInteraction, .beginFromCurrentState]) {
-                self.transform = .identity
+                self.markerImageView.transform = .identity
             }
         }
     }
@@ -114,9 +142,7 @@ final class PersonPinView: MarkerView {
 
     override func configure() {
         guard let a = annotation as? PersonAnnotation else { return }
-        let marker = MarkerRenderer.person(a.item, selected: isSelected, traits: traitCollection)
-        image = marker.image
-        centerOffset = marker.offset
+        apply(MarkerRenderer.person(a.item, selected: isSelected, traits: traitCollection))
         accessibilityLabel = a.item.name
         accessibilityIdentifier = "pin-\(a.item.name)"
     }
@@ -139,9 +165,7 @@ final class SpotPinView: MarkerView {
 
     override func configure() {
         guard let a = annotation as? SpotAnnotation else { return }
-        let marker = MarkerRenderer.spot(a.item, selected: isSelected, traits: traitCollection)
-        image = marker.image
-        centerOffset = marker.offset
+        apply(MarkerRenderer.spot(a.item, selected: isSelected, traits: traitCollection))
         accessibilityLabel = "\(a.item.name)，\(a.item.count) 次"
         accessibilityIdentifier = "spot-\(a.item.name)"
     }
@@ -155,16 +179,12 @@ final class ClusterMarkerView: MarkerView {
         let members = cluster.memberAnnotations
         let people = members.compactMap { ($0 as? PersonAnnotation)?.item }
         if !people.isEmpty {
-            let marker = MarkerRenderer.personCluster(people, traits: traitCollection)
-            image = marker.image
-            centerOffset = marker.offset
+            apply(MarkerRenderer.personCluster(people, traits: traitCollection))
             accessibilityLabel = "\(people.count) 人"
             accessibilityIdentifier = "cluster-people"
         } else {
             let spots = members.compactMap { ($0 as? SpotAnnotation)?.item }
-            let marker = MarkerRenderer.spotCluster(spots, traits: traitCollection)
-            image = marker.image
-            centerOffset = marker.offset
+            apply(MarkerRenderer.spotCluster(spots, traits: traitCollection))
             accessibilityLabel = "\(spots.count) 个地点"
             accessibilityIdentifier = "cluster-spots"
         }

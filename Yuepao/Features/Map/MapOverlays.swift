@@ -51,19 +51,21 @@ final class HeatRenderer: MKOverlayRenderer {
     init(heat: HeatOverlay) {
         self.heat = heat
         let space = CGColorSpaceCreateDeviceRGB()
-        let wine = UIColor(red: 0.62, green: 0.18, blue: 0.29, alpha: 1)
-        let rose = UIColor(red: 0.86, green: 0.40, blue: 0.43, alpha: 1)
-        let gold = UIColor(red: 1.0, green: 0.86, blue: 0.62, alpha: 1)
+        // 外圈酒红 → 玫瑰，中心是偏橙的香槟色，浅色和深色底图上都看得清
+        let wine = UIColor(red: 0.58, green: 0.13, blue: 0.25, alpha: 1)
+        let rose = UIColor(red: 0.84, green: 0.27, blue: 0.34, alpha: 1)
+        let ember = UIColor(red: 0.96, green: 0.48, blue: 0.33, alpha: 1)
+        let gold = UIColor(red: 1.0, green: 0.80, blue: 0.52, alpha: 1)
         glow = CGGradient(colorsSpace: space,
-                          colors: [rose.withAlphaComponent(0.62).cgColor,
-                                   wine.withAlphaComponent(0.34).cgColor,
+                          colors: [rose.withAlphaComponent(0.66).cgColor,
+                                   wine.withAlphaComponent(0.36).cgColor,
                                    wine.withAlphaComponent(0).cgColor] as CFArray,
-                          locations: [0, 0.42, 1])
+                          locations: [0, 0.48, 1])
         core = CGGradient(colorsSpace: space,
-                          colors: [gold.withAlphaComponent(0.95).cgColor,
-                                   gold.withAlphaComponent(0.35).cgColor,
-                                   gold.withAlphaComponent(0).cgColor] as CFArray,
-                          locations: [0, 0.4, 1])
+                          colors: [gold.withAlphaComponent(1).cgColor,
+                                   ember.withAlphaComponent(0.7).cgColor,
+                                   ember.withAlphaComponent(0).cgColor] as CFArray,
+                          locations: [0, 0.38, 1])
         super.init(overlay: heat)
     }
 
@@ -78,14 +80,14 @@ final class HeatRenderer: MKOverlayRenderer {
         context.saveGState()
         for s in visible {
             let center = point(for: s.point)
-            let radius = (36 + 40 * s.weight) / zoomScale
+            let radius = (40 + 36 * s.weight) / zoomScale
             context.drawRadialGradient(glow, startCenter: center, startRadius: 0,
                                        endCenter: center, endRadius: radius, options: [])
         }
         for s in visible where s.weight > 0.2 {
             let center = point(for: s.point)
-            let radius = (9 + 20 * s.weight) / zoomScale
-            context.setAlpha(0.3 + 0.7 * s.weight)
+            let radius = (12 + 22 * s.weight) / zoomScale
+            context.setAlpha(0.45 + 0.55 * s.weight)
             context.drawRadialGradient(core, startCenter: center, startRadius: 0,
                                        endCenter: center, endRadius: radius, options: [])
         }

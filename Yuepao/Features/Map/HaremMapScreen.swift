@@ -317,12 +317,18 @@ struct HaremMapScreen: View {
         switch which {
         case .girl(let id):
             if let g = girls.first(where: { $0.id == id }) {
-                NavigationStack { GirlDetailView(girl: g) }
+                NavigationStack {
+                    GirlDetailView(girl: g)
+                        .toolbar { closeButton }
+                }
             }
         case .place(let id):
             if let p = places.first(where: { $0.id == id }) {
-                NavigationStack { PlaceDetailView(place: p) }
-                    .presentationDetents([.medium, .large])
+                NavigationStack {
+                    PlaceDetailView(place: p)
+                        .toolbar { closeButton }
+                }
+                .presentationDetents([.medium, .large])
             }
         case .record(let girlID, let placeID):
             EncounterEditView(encounter: nil,
@@ -345,6 +351,18 @@ struct HaremMapScreen: View {
                             },
                             onFocusPlace: { id in focusPlaceFromOverview(id) })
                 .composerSheet()
+        }
+    }
+
+    private var closeButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                sheet = nil
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .accessibilityLabel("关闭")
+            .accessibilityIdentifier("closeMapSheet")
         }
     }
 

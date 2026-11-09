@@ -66,6 +66,8 @@ struct ClusterMapView: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         tap.cancelsTouchesInView = false
         tap.delegate = context.coordinator
+        // 长按松手时不要再当成「点空白处」，否则刚放下的新地点会被马上取消
+        tap.require(toFail: longPress)
         map.addGestureRecognizer(tap)
 
         context.coordinator.map = map
@@ -464,16 +466,9 @@ struct ClusterMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
             guard CACurrentMediaTime() < animateUntil else { return }
-            for (index, view) in views.enumerated() where view is MarkerView {
-                let target = view.alpha
-                view.alpha = 0
-                view.transform = CGAffineTransform(scaleX: 0.3, y: 0.3)
-                UIView.animate(withDuration: 0.55, delay: min(Double(index) * 0.03, 0.3),
-                               usingSpringWithDamping: 0.62, initialSpringVelocity: 0.6,
-                               options: [.allowUserInteraction]) {
-                    view.alpha = target
-                    view.transform = .identity
-                }
+            for (index, view) in views.enumerated() {
+                guard let marker = view as? MarkerView else { continue }
+                marker.appear(delay: min(Double(index) * 0.03, 0.3), alpha: marker.alpha)
             }
         }
 

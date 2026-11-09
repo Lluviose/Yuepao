@@ -11,8 +11,10 @@
 | 后宫 | 档案详情 | 日程 |
 | --- | --- | --- |
 | ![后宫](docs/screenshots/b0-tab.jpg) | ![档案](docs/screenshots/c1-detail.jpg) | ![日程](docs/screenshots/b2-tab.jpg) |
-| **周期** | **地图** | **统计** |
-| ![周期](docs/screenshots/c3-cycle.jpg) | ![地图](docs/screenshots/b3-tab.jpg) | ![统计](docs/screenshots/b4-tab.jpg) |
+| **周期** | **地图** | **成就** |
+| ![周期](docs/screenshots/c3-cycle.jpg) | ![地图](docs/screenshots/k1-map.jpg) | ![成就](docs/screenshots/b4-tab.jpg) |
+| **地图：选中一个人** | **地图：热力** | **地图：足迹回放** |
+| ![选中](docs/screenshots/k4-focus.jpg) | ![热力](docs/screenshots/f5-dark-heat.jpg) | ![回放](docs/screenshots/k8-playback.jpg) |
 
 ## 拿到 IPA
 
