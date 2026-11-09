@@ -129,10 +129,10 @@ final class SmokeTests: XCTestCase {
 
         // 记录详情 + 记一次表单（快速选人）
         tapTab(app, "记录")
-        let firstRecord = app.cells.firstMatch
+        let firstRecord = app.staticTexts["阿雪"].firstMatch
         if firstRecord.waitForExistence(timeout: 5) {
             firstRecord.tap()
-            sleep(1)
+            sleep(2)
             shot(app, "e1-record-detail")
             app.navigationBars.buttons.element(boundBy: 0).tap()
             sleep(1)
