@@ -7,6 +7,7 @@ enum Reminders {
     static var discreet: Bool { UserDefaults.standard.object(forKey: "discreetNotifications") as? Bool ?? true }
     static var riskEnabled: Bool { UserDefaults.standard.object(forKey: "riskReminders") as? Bool ?? true }
     static var periodEnabled: Bool { UserDefaults.standard.object(forKey: "periodReminders") as? Bool ?? false }
+    static var weeklyNudgeEnabled: Bool { UserDefaults.standard.bool(forKey: "weeklyNudge") }
 
     private static let datePrefix = "date-"
     private static let riskPrefix = "risk-"
@@ -141,6 +142,27 @@ enum Reminders {
 
     static func cancelTodo(id: UUID) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["todo-\(id)"])
+    }
+
+    // MARK: 每周目标
+
+    private static let weeklyNudgeID = "weekly-nudge"
+
+    /// 本周还没达成目标时，周四晚上 8 点提醒一次
+    static func updateWeeklyNudge(remaining: Int) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [weeklyNudgeID])
+        guard enabled, weeklyNudgeEnabled, remaining > 0 else { return }
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2
+        cal.timeZone = .current
+        guard let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start,
+              let thursday = cal.date(byAdding: .day, value: 3, to: weekStart),
+              let fire = cal.date(bySettingHour: 20, minute: 0, second: 0, of: thursday),
+              fire > Date() else { return }
+        let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        add(id: weeklyNudgeID,
+            content: content(title: "本周目标", body: "本周还差 \(remaining) 次达成目标，周末安排一下？"),
+            trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false))
     }
 
     // MARK: 风险提醒

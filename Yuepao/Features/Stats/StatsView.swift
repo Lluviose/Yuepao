@@ -10,7 +10,6 @@ struct StatsView: View {
     @Environment(\.modelContext) private var context
 
     @State private var rankingMode: RankingMode = .count
-    @State private var chartsVisible = false
     @State private var selectedMonth: Date?
 
     enum RankingMode: String, CaseIterable, Identifiable {
@@ -41,9 +40,6 @@ struct StatsView: View {
         }
         .navigationTitle("统计")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            withAnimation(.smooth(duration: 0.9).delay(0.1)) { chartsVisible = true }
-        }
     }
 
     // MARK: Sections
@@ -112,7 +108,7 @@ struct StatsView: View {
                 let isSelected = selectedMonth.map { Calendar.current.isDate($0, equalTo: item.month, toGranularity: .month) } ?? false
                 BarMark(
                     x: .value("月份", item.month, unit: .month),
-                    y: .value("次数", chartsVisible ? item.count : 0)
+                    y: .value("次数", item.count)
                 )
                 .foregroundStyle(selectedMonth == nil || isSelected
                                  ? Color.accentColor.gradient
@@ -166,7 +162,7 @@ struct StatsView: View {
             Chart(s.weekdays) { item in
                 BarMark(
                     x: .value("星期", item.label),
-                    y: .value("次数", chartsVisible ? item.count : 0)
+                    y: .value("次数", item.count)
                 )
                 .foregroundStyle(Color.accentColor.gradient)
                 .cornerRadius(3)
@@ -177,7 +173,7 @@ struct StatsView: View {
             Chart(s.dayParts) { item in
                 BarMark(
                     x: .value("时段", item.label),
-                    y: .value("次数", chartsVisible ? item.count : 0)
+                    y: .value("次数", item.count)
                 )
                 .foregroundStyle(Palette.gold.gradient)
                 .cornerRadius(3)

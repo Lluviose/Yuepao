@@ -57,6 +57,7 @@ final class AchievementCenter: ObservableObject {
                                    weeklyGoal: weeklyGoal)
         let fresh = AchievementEngine.evaluate(data)
         weekly = AchievementEngine.weekly(encounters.map(\.date), goal: weeklyGoal)
+        Reminders.updateWeeklyNudge(remaining: weekly.remaining)
 
         let unlocked = fresh.filter(\.unlocked)
         if !initialized {

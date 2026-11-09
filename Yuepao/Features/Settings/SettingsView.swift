@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage("discreetNotifications") private var discreetNotifications = true
     @AppStorage("riskReminders") private var riskReminders = true
     @AppStorage("periodReminders") private var periodReminders = false
+    @AppStorage("weeklyNudge") private var weeklyNudge = false
     @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
     @Environment(\.dismiss) private var dismiss
 
@@ -166,6 +167,8 @@ struct SettingsView: View {
                 Toggle("有风险时提醒做检测", isOn: $riskReminders)
                 Toggle("经期提醒（预计前一天晚上）", isOn: $periodReminders)
                     .onChange(of: periodReminders) { _, _ in Reminders.rescheduleDates(girls: girls) }
+                Toggle("每周目标提醒（周四晚上）", isOn: $weeklyNudge)
+                    .onChange(of: weeklyNudge) { _, _ in AchievementCenter.shared.refresh(context: context) }
             }
         } header: {
             Text("提醒")

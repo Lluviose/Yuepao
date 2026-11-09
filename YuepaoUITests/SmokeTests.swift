@@ -170,6 +170,17 @@ final class SmokeTests: XCTestCase {
         sleep(1)
         shot(app, "b5-hub-more")
 
+        // 最近解锁里点一枚奖章看详情
+        let recentMedal = app.buttons.matching(NSPredicate(format: "label CONTAINS '安全第一' OR label CONTAINS '左拥右抱'")).firstMatch
+        if recentMedal.waitForExistence(timeout: 3) && recentMedal.isHittable {
+            recentMedal.tap()
+            sleep(2)
+            shot(app, "i2-achievement-detail")
+            let close = app.buttons["closeAchievement"].firstMatch
+            if close.waitForExistence(timeout: 3) { close.tap() }
+            sleep(1)
+        }
+
         // 完整统计
         let stats = app.buttons["openStats"].firstMatch
         if scrollTo(stats, in: app) {

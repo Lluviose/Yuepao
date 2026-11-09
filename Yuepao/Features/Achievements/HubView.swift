@@ -344,7 +344,7 @@ struct WeeklyGoalCard: View {
                 Circle()
                     .stroke(Color.secondary.opacity(0.14), lineWidth: 9)
                 Circle()
-                    .trim(from: 0, to: animated ? max(progress.progress, 0.001) : 0)
+                    .trim(from: 0, to: animated ? progress.progress : 0)
                     .stroke(
                         AngularGradient(colors: [Palette.gold.opacity(0.7), Palette.gold, Color.accentColor.opacity(0.9)],
                                         center: .center),
