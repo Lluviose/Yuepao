@@ -140,6 +140,83 @@ struct LockScreen: View {
     }
 }
 
+/// 锁屏和后台遮罩放在一个最上层的单独窗口里。
+/// 这样在「记一次」之类的弹窗里、或者全屏看照片视频时切到后台，内容也一样会被盖住，
+/// 回来时要先解锁才能看到
+@MainActor
+final class PrivacyShield {
+    static let shared = PrivacyShield()
+
+    private let state = ShieldState()
+    private var window: UIWindow?
+
+    func update(locked: Bool, covered: Bool) {
+        state.locked = locked
+        if locked || covered {
+            show()
+        } else {
+            hide()
+        }
+    }
+
+    private func show() {
+        if let window {
+            window.isHidden = false
+            return
+        }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return }
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
+        window.overrideUserInterfaceStyle = Self.interfaceStyle
+        let host = UIHostingController(rootView: ShieldView(state: state))
+        host.view.backgroundColor = .clear
+        window.rootViewController = host
+        window.isHidden = false
+        self.window = window
+    }
+
+    /// 淡出后收起。淡出途中又要显示时会新建一个窗口，不受影响
+    private func hide() {
+        guard let window else { return }
+        self.window = nil
+        UIView.animate(withDuration: 0.2, animations: {
+            window.alpha = 0
+        }, completion: { _ in
+            window.isHidden = true
+        })
+    }
+
+    private static var interfaceStyle: UIUserInterfaceStyle {
+        switch AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system {
+        case .system: return .unspecified
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
+final class ShieldState: ObservableObject {
+    @Published var locked = false
+}
+
+private struct ShieldView: View {
+    @ObservedObject var state: ShieldState
+
+    var body: some View {
+        ZStack {
+            if state.locked {
+                LockScreen()
+                    .transition(.opacity)
+            } else {
+                PrivacyCover()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: state.locked)
+    }
+}
+
 /// 进入多任务界面时盖住内容
 struct PrivacyCover: View {
     var body: some View {

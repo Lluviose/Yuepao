@@ -20,6 +20,38 @@ struct PickedMovie: Transferable {
     }
 }
 
+/// 备用：实况照片的文件包（里面是照片和配对视频两个文件）。
+/// 正常走 `PHLivePhoto` 拿资源，拿不到时再试这个
+struct PickedLiveBundle: Transferable {
+    let photo: URL
+    let video: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: UTType(importedAs: "com.apple.live-photo-bundle")) { received in
+            try unpack(received.file)
+        }
+        FileRepresentation(importedContentType: UTType(importedAs: "com.apple.private.live-photo-bundle")) { received in
+            try unpack(received.file)
+        }
+    }
+
+    private static func unpack(_ bundle: URL) throws -> PickedLiveBundle {
+        let fm = FileManager.default
+        let files = try fm.contentsOfDirectory(at: bundle, includingPropertiesForKeys: nil)
+        func kind(_ file: URL) -> UTType? { UTType(filenameExtension: file.pathExtension) }
+        guard let photo = files.first(where: { kind($0)?.conforms(to: .image) == true }),
+              let video = files.first(where: { kind($0)?.conforms(to: .movie) == true }) else {
+            throw MediaError.unsupported
+        }
+        let store = MediaStore.shared
+        let photoCopy = store.incomingURL(ext: photo.pathExtension)
+        let videoCopy = store.incomingURL(ext: video.pathExtension)
+        try fm.copyItem(at: photo, to: photoCopy)
+        try fm.copyItem(at: video, to: videoCopy)
+        return PickedLiveBundle(photo: photoCopy, video: videoCopy)
+    }
+}
+
 /// 从系统相册导入：照片保留原始编码（HEIC 就是 HEIC），视频拿原文件，
 /// 实况照片把照片和配对视频都存下来。选择器要用 `preferredItemEncoding: .current`，否则系统可能会转码
 enum MediaImporter {
@@ -52,6 +84,16 @@ enum MediaImporter {
 
     /// 实况：取出照片和配对视频的原始资源分别保存。取不到时返回 nil，按普通照片导入
     private static func importLive(_ item: PhotosPickerItem) async -> String? {
+        if let id = await importLiveResources(item) { return id }
+        guard let bundle = try? await item.loadTransferable(type: PickedLiveBundle.self) else { return nil }
+        defer {
+            try? FileManager.default.removeItem(at: bundle.photo)
+            try? FileManager.default.removeItem(at: bundle.video)
+        }
+        return try? await MediaStore.shared.importLive(photoURL: bundle.photo, videoURL: bundle.video)
+    }
+
+    private static func importLiveResources(_ item: PhotosPickerItem) async -> String? {
         guard let live = try? await item.loadTransferable(type: PHLivePhoto.self) else { return nil }
         let resources = PHAssetResource.assetResources(for: live)
         guard let photo = resources.first(where: { $0.type == .fullSizePhoto })

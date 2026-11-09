@@ -82,15 +82,17 @@ struct MediaInfo: Codable, Hashable {
         return "\(width) × \(height)"
     }
 
-    /// 「HEIC · 12 MP · 3.1 MB」
+    /// 「实况 · HEIC · 12 MP · 3.1 MB」「MOV · 4K · 0:32 · 210 MB」
     var summary: String {
         var parts: [String] = []
+        if kind == .live { parts.append("实况") }
         if legacy {
             parts.append("旧版压缩图")
         } else if !format.isEmpty {
             parts.append(format)
         }
         if let resolution { parts.append(resolution) }
+        if kind == .video, let duration, duration > 0 { parts.append(Fmt.clock(duration)) }
         if bytes > 0 { parts.append(Fmt.bytes(bytes)) }
         return parts.joined(separator: " · ")
     }
@@ -509,7 +511,7 @@ final class MediaStore {
     }
 
     func commitStaging() throws {
-        let files = try fm.contentsOfDirectory(at: stagingDirectory, includingPropertiesForKeys: nil)
+        let files = (try? fm.contentsOfDirectory(at: stagingDirectory, includingPropertiesForKeys: nil)) ?? []
         try? fm.createDirectory(at: directory, withIntermediateDirectories: true,
                                 attributes: [.protectionKey: FileProtectionType.complete])
         for file in files {

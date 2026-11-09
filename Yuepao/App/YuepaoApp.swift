@@ -64,16 +64,26 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             lock.handle(phase)
+            updateShield(phase)
             if phase == .active {
                 Reminders.rescheduleDates(girls: girls)
                 achievements.refresh(context: context)
             }
         }
+        .onChange(of: lock.isLocked) { _, _ in
+            updateShield(scenePhase)
+        }
         .onAppear {
             if scenePhase == .active { lock.handle(.active) }
+            updateShield(scenePhase)
             achievements.refresh(context: context)
         }
         .preferredColorScheme(AppearanceMode(rawValue: appearance)?.colorScheme)
+    }
+
+    /// 弹窗和全屏查看器会盖在这一层上面，所以锁屏和遮罩另外放在最上层的窗口里
+    private func updateShield(_ phase: ScenePhase) {
+        PrivacyShield.shared.update(locked: lock.isLocked, covered: phase != .active)
     }
 }
 

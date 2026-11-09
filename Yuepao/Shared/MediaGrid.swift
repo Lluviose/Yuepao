@@ -110,7 +110,7 @@ struct MediaGrid: View {
         } else {
             MosaicLayout(spacing: 4) {
                 ForEach(Array(ids.enumerated()), id: \.element) { index, id in
-                    tile(id, index: index, pixels: index == 0 || ids.count <= 2 ? 720 : 384)
+                    tile(id, index: index, pixels: index == 0 || ids.count <= 5 ? 720 : 384)
                 }
                 ForEach(0..<pending, id: \.self) { _ in
                     ImportingTile()
@@ -311,7 +311,7 @@ private struct ImportingTile: View {
     }
 }
 
-/// 拼图：1 张 4:3；2 张并排；3 张以上第一张 2×2，其余三列
+/// 拼图：1 张 4:3；2、4 张两列；5 张上二下三；3 张和 6 张以上第一张 2×2，其余三列
 struct MosaicLayout: Layout {
     var spacing: CGFloat = 4
 
@@ -333,24 +333,43 @@ struct MosaicLayout: Layout {
 
     func frames(count: Int, width: CGFloat) -> [CGRect] {
         guard count > 0, width > 0 else { return [] }
+        let s = spacing
         switch count {
         case 1:
             return [CGRect(x: 0, y: 0, width: width, height: (width * 0.75).rounded())]
-        case 2:
-            let side = (width - spacing) / 2
-            return [CGRect(x: 0, y: 0, width: side, height: side),
-                    CGRect(x: side + spacing, y: 0, width: side, height: side)]
+        case 2, 4:
+            let side = (width - s) / 2
+            return (0..<count).map { i in
+                CGRect(x: CGFloat(i % 2) * (side + s), y: CGFloat(i / 2) * (side + s), width: side, height: side)
+            }
+        case 5:
+            // 上面两张大的，下面三张小的
+            let half = (width - s) / 2
+            let third = (width - s * 2) / 3
+            let top = (0..<2).map { i in
+                CGRect(x: CGFloat(i) * (half + s), y: 0, width: half, height: half)
+            }
+            let bottom = (0..<3).map { i in
+                CGRect(x: CGFloat(i) * (third + s), y: half + s, width: third, height: third)
+            }
+            return top + bottom
         default:
-            let cell = (width - spacing * 2) / 3
-            let big = cell * 2 + spacing
+            // 第一张 2×2，右边两张小的；其余每行三张，最后一行不满时平分宽度铺满
+            let cell = (width - s * 2) / 3
+            let big = cell * 2 + s
             var rects = [CGRect(x: 0, y: 0, width: big, height: big),
-                         CGRect(x: big + spacing, y: 0, width: cell, height: cell),
-                         CGRect(x: big + spacing, y: cell + spacing, width: cell, height: cell)]
-            for i in 3..<count {
-                let row = CGFloat((i - 3) / 3)
-                let col = CGFloat((i - 3) % 3)
-                rects.append(CGRect(x: col * (cell + spacing), y: big + spacing + row * (cell + spacing),
-                                    width: cell, height: cell))
+                         CGRect(x: big + s, y: 0, width: cell, height: cell),
+                         CGRect(x: big + s, y: cell + s, width: cell, height: cell)]
+            var placed = 3
+            var y = big + s
+            while placed < count {
+                let inRow = min(3, count - placed)
+                let w = (width - s * CGFloat(inRow - 1)) / CGFloat(inRow)
+                for k in 0..<inRow {
+                    rects.append(CGRect(x: CGFloat(k) * (w + s), y: y, width: w, height: cell))
+                }
+                placed += inRow
+                y += cell + s
             }
             return rects
         }

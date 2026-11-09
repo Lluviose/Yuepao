@@ -37,6 +37,7 @@ struct MediaViewer: View {
     var caption: ((String) -> String?)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var items: [String]
     @State private var current: String
     @State private var state = ViewerState()
@@ -98,6 +99,21 @@ struct MediaViewer: View {
                     }
                     bottomBar
                 }
+                // 亮的照片、视频上也看得清按钮和文字
+                .background(alignment: .top) {
+                    LinearGradient(colors: [Color.black.opacity(0.5), Color.black.opacity(0)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 150)
+                        .ignoresSafeArea(edges: .top)
+                        .allowsHitTesting(false)
+                }
+                .background(alignment: .bottom) {
+                    LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.45)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 190)
+                        .ignoresSafeArea(edges: .bottom)
+                        .allowsHitTesting(false)
+                }
             }
         }
         .overlay(alignment: .bottom) {
@@ -122,6 +138,10 @@ struct MediaViewer: View {
         .onDisappear {
             state.activePlayer?.pause()
             MediaStore.shared.purgePlayback()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // 切到多任务界面或后台时先停下，别在外面放出声音
+            if phase != .active { state.activePlayer?.pause() }
         }
         .task { await loadInfos() }
         .sheet(item: $sharing) { file in
@@ -394,6 +414,7 @@ private struct MediaPage: View {
             if value {
                 if let player {
                     state.activePlayer = player
+                    autoplay(player)
                 }
                 hintLive()
             } else {
@@ -507,6 +528,15 @@ private struct MediaPage: View {
         }
     }
 
+    /// 翻到视频页就播放，跟系统相册一样；上次已经播完的从头开始
+    private func autoplay(_ player: AVPlayer) {
+        if let item = player.currentItem, item.duration.isNumeric,
+           CMTimeCompare(item.currentTime(), item.duration) >= 0 {
+            player.seek(to: .zero)
+        }
+        player.play()
+    }
+
     /// 翻到实况照片时轻轻动一下，跟系统相册一样
     private func hintLive() {
         guard kind == .live, livePhoto != nil else { return }
@@ -617,6 +647,16 @@ private struct VideoControls: View {
     private func attach() {
         muted = player.isMuted
         playing = player.timeControlStatus != .paused
+        if let item = player.currentItem {
+            let now = item.currentTime().seconds
+            if now.isFinite { time = now }
+            // 还没开始播时也先把总时长显示出来
+            Task {
+                if let total = try? await item.asset.load(.duration), total.seconds.isFinite, total.seconds > 0 {
+                    duration = total.seconds
+                }
+            }
+        }
         let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
         token = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { now in
             if !scrubbing, now.seconds.isFinite { time = now.seconds }
