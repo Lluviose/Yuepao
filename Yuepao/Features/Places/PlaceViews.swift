@@ -82,6 +82,7 @@ struct PlaceEditView: View {
                         .lineLimit(2...6)
                 }
             }
+            .formKeyboardHandling()
             .navigationTitle(place == nil ? "新建地点" : "编辑地点")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -113,6 +114,7 @@ struct PlaceEditView: View {
         target.note = note
         target.rating = rating
         try? context.save()
+        Haptics.success()
         onSave?(target)
         dismiss()
     }

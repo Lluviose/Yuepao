@@ -12,6 +12,7 @@ struct StatsView: View {
     @State private var rankingMode: RankingMode = .count
     @State private var showSettings = false
     @State private var chartsVisible = false
+    @State private var selectedMonth: Date?
 
     enum RankingMode: String, CaseIterable, Identifiable {
         case count, rounds, spending, rating
@@ -122,15 +123,27 @@ struct StatsView: View {
     }
 
     private func monthlySection(_ s: StatsData) -> some View {
-        Section("近 12 个月") {
+        Section {
             Chart(s.monthly) { item in
+                let isSelected = selectedMonth.map { Calendar.current.isDate($0, equalTo: item.month, toGranularity: .month) } ?? false
                 BarMark(
                     x: .value("月份", item.month, unit: .month),
                     y: .value("次数", chartsVisible ? item.count : 0)
                 )
-                .foregroundStyle(Color.accentColor.gradient)
+                .foregroundStyle(selectedMonth == nil || isSelected
+                                 ? Color.accentColor.gradient
+                                 : Color.accentColor.opacity(0.25).gradient)
                 .cornerRadius(3)
+                .annotation(position: .top, spacing: 4) {
+                    if isSelected {
+                        Text("\(item.count)")
+                            .font(.caption.weight(.bold))
+                            .fontDesign(.rounded)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
             }
+            .chartXSelection(value: $selectedMonth)
             .chartXAxis {
                 AxisMarks(values: .stride(by: .month, count: 2)) { _ in
                     AxisValueLabel(format: .dateTime.month(.defaultDigits), centered: true)
@@ -138,6 +151,20 @@ struct StatsView: View {
             }
             .frame(height: 180)
             .padding(.vertical, 6)
+            .sensoryFeedback(.selection, trigger: selectedMonth.map { Calendar.current.component(.month, from: $0) })
+        } header: {
+            HStack {
+                Text("近 12 个月")
+                Spacer()
+                if let m = selectedMonth, let item = s.monthly.first(where: { Calendar.current.isDate($0.month, equalTo: m, toGranularity: .month) }) {
+                    Text("\(Fmt.month(item.month)) · \(item.count) 次")
+                        .foregroundStyle(Color.accentColor)
+                        .transition(.opacity)
+                } else {
+                    Text("按住柱子查看").foregroundStyle(.tertiary)
+                }
+            }
+            .animation(.snappy, value: selectedMonth)
         }
     }
 

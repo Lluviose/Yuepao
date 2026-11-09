@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage("discreetNotifications") private var discreetNotifications = true
     @AppStorage("riskReminders") private var riskReminders = true
     @AppStorage("periodReminders") private var periodReminders = false
+    @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
     @Environment(\.dismiss) private var dismiss
 
     @State private var exportSheet = false
@@ -32,6 +33,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 securitySection
+                appearanceSection
                 notificationSection
                 customizeSection
                 dataSection
@@ -118,6 +120,25 @@ struct SettingsView: View {
             } else {
                 Text("切到后台时内容会被遮住。主屏幕上的名字和图标是「手账」。")
             }
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section {
+            Picker("外观", selection: $appearance) {
+                ForEach(AppearanceMode.allCases) { m in
+                    Text(m.title).tag(m.rawValue)
+                }
+            }
+            NavigationLink {
+                AppIconPicker()
+            } label: {
+                LabeledContent("App 图标") {
+                    Text(AppIconChoice.current.title).foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("外观")
         }
     }
 
@@ -472,5 +493,118 @@ struct CustomFieldEditor: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+// MARK: - App 图标
+
+enum AppIconChoice: String, CaseIterable, Identifiable {
+    case standard, dark, minimal, list
+
+    var id: String { rawValue }
+
+    /// 传给 setAlternateIconName 的名字，默认图标是 nil
+    var iconName: String? {
+        switch self {
+        case .standard: return nil
+        case .dark: return "AppIconDark"
+        case .minimal: return "AppIconMinimal"
+        case .list: return "AppIconList"
+        }
+    }
+
+    var preview: String {
+        switch self {
+        case .standard: return "IconPreviewDefault"
+        case .dark: return "IconPreviewDark"
+        case .minimal: return "IconPreviewMinimal"
+        case .list: return "IconPreviewList"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .standard: return "手账"
+        case .dark: return "深色"
+        case .minimal: return "极简"
+        case .list: return "清单"
+        }
+    }
+
+    @MainActor
+    static var current: AppIconChoice {
+        let name = UIApplication.shared.alternateIconName
+        return allCases.first { $0.iconName == name } ?? .standard
+    }
+}
+
+struct AppIconPicker: View {
+    @State private var selected = AppIconChoice.current
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            Section {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
+                    ForEach(AppIconChoice.allCases) { choice in
+                        Button {
+                            apply(choice)
+                        } label: {
+                            VStack(spacing: 8) {
+                                Image(choice.preview)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 76, height: 76)
+                                    .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                                    }
+                                    .padding(4)
+                                    .overlay {
+                                        if selected == choice {
+                                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                                .stroke(Color.accentColor, lineWidth: 3)
+                                        }
+                                    }
+                                    .shadow(color: .black.opacity(0.1), radius: 6, y: 3)
+                                Text(choice.title)
+                                    .font(.footnote.weight(selected == choice ? .semibold : .regular))
+                                    .foregroundStyle(selected == choice ? Color.accentColor : Color.primary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 10)
+            } footer: {
+                Text("主屏幕上的名字始终是「手账」。切换时系统会弹一个提示，属于正常现象。")
+            }
+        }
+        .navigationTitle("App 图标")
+        .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.selection, trigger: selected)
+        .alert("无法切换图标", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(error ?? "")
+        }
+    }
+
+    private func apply(_ choice: AppIconChoice) {
+        guard choice != selected else { return }
+        withAnimation(.snappy) { selected = choice }
+        guard UIApplication.shared.supportsAlternateIcons else {
+            error = "当前设备不支持更换图标"
+            return
+        }
+        UIApplication.shared.setAlternateIconName(choice.iconName) { err in
+            if let err {
+                Task { @MainActor in
+                    error = err.localizedDescription
+                    selected = AppIconChoice.current
+                }
+            }
+        }
     }
 }

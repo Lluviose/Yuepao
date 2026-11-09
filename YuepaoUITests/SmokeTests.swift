@@ -13,9 +13,10 @@ final class SmokeTests: XCTestCase {
         }
     }
 
-    private func makeApp(seed: Bool) -> XCUIApplication {
+    private func makeApp(seed: Bool, dark: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                               "-appearance", dark ? "dark" : "light"]
         if seed { app.launchArguments.append("-seedDemo") }
         return app
     }
@@ -126,6 +127,31 @@ final class SmokeTests: XCTestCase {
             shot(app, "b\(index)-tab")
         }
 
+        // 记录详情 + 记一次表单（快速选人）
+        tapTab(app, "记录")
+        let firstRecord = app.cells.firstMatch
+        if firstRecord.waitForExistence(timeout: 5) {
+            firstRecord.tap()
+            sleep(1)
+            shot(app, "e1-record-detail")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            sleep(1)
+        }
+        app.buttons["addEncounter"].firstMatch.tap()
+        let quickPick = app.buttons["小美"].firstMatch
+        if quickPick.waitForExistence(timeout: 5) {
+            quickPick.tap()
+            sleep(1)
+            shot(app, "e2-record-form")
+        }
+        app.buttons["取消"].firstMatch.tap()
+        let discard = app.buttons["放弃修改"].firstMatch
+        if discard.waitForExistence(timeout: 3) {
+            shot(app, "e3-discard")
+            discard.tap()
+        }
+        sleep(1)
+
         // 统计往下翻
         tapTab(app, "统计")
         app.swipeUp()
@@ -176,6 +202,23 @@ final class SmokeTests: XCTestCase {
             timelineLink.tap()
             sleep(2)
             shot(app, "c5-timeline")
+        }
+    }
+
+    func testDarkMode() {
+        let app = makeApp(seed: true, dark: true)
+        app.launch()
+        for (index, tab) in ["后宫", "日程", "统计"].enumerated() {
+            tapTab(app, tab)
+            sleep(1)
+            shot(app, "f\(index)-dark")
+        }
+        tapTab(app, "后宫")
+        let mei = app.staticTexts["小美"].firstMatch
+        if mei.waitForExistence(timeout: 5) {
+            mei.tap()
+            sleep(2)
+            shot(app, "f3-dark-detail")
         }
     }
 }

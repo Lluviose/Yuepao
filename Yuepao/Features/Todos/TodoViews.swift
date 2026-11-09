@@ -309,6 +309,7 @@ struct TodoEditView: View {
                     }
                 }
             }
+            .formKeyboardHandling()
             .navigationTitle(todo == nil ? "新待办" : "编辑待办")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -344,6 +345,7 @@ struct TodoEditView: View {
         target.hasTime = hasDate && hasTime
         target.remind = hasDate && remind
         try? context.save()
+        Haptics.success()
         Reminders.scheduleTodo(target, girlName: girls.first { $0.id == girlID }?.name)
         dismiss()
     }

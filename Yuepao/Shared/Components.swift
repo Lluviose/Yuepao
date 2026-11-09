@@ -352,6 +352,8 @@ struct OptionChoiceList: View {
 struct PhotoGrid: View {
     @Binding var photoIDs: [String]
     var columns: Int = 4
+    /// 提供时，长按照片可以「设为头像」
+    var onSetCover: ((String) -> Void)?
 
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var viewer: PhotoViewerTarget?
@@ -362,6 +364,20 @@ struct PhotoGrid: View {
             ForEach(Array(photoIDs.enumerated()), id: \.element) { index, id in
                 PhotoThumb(id: id)
                     .onTapGesture { viewer = PhotoViewerTarget(index: index) }
+                    .contextMenu {
+                        if let onSetCover {
+                            Button {
+                                onSetCover(id)
+                            } label: {
+                                Label("设为头像", systemImage: "person.crop.circle")
+                            }
+                        }
+                        Button(role: .destructive) {
+                            withAnimation(.snappy) { photoIDs.removeAll { $0 == id } }
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
             }
             PhotosPicker(selection: $pickerItems, maxSelectionCount: 20, matching: .images) {
                 ZStack {

@@ -219,6 +219,9 @@ enum MarkerRenderer {
 struct ClusterMapView: UIViewRepresentable {
     var girls: [MapGirlItem]
     var places: [MapPlaceItem]
+    /// 每次加 1 就执行一次「显示全部」/「定位到我」
+    var fitRequest: Int = 0
+    var locateRequest: Int = 0
     var onSelect: (MapSelection) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -241,12 +244,32 @@ struct ClusterMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.sync(map)
+        context.coordinator.handleRequests(map)
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: ClusterMapView
         private var signature = ""
         private var didFit = false
+        private var lastFit = 0
+        private var lastLocate = 0
+
+        func handleRequests(_ map: MKMapView) {
+            if parent.fitRequest != lastFit {
+                lastFit = parent.fitRequest
+                let all = map.annotations.filter { !($0 is MKUserLocation) }
+                Coordinator.fit(map, to: all, animated: true)
+            }
+            if parent.locateRequest != lastLocate {
+                lastLocate = parent.locateRequest
+                if let location = map.userLocation.location {
+                    let region = MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 4000, longitudinalMeters: 4000)
+                    map.setRegion(map.regionThatFits(region), animated: true)
+                } else {
+                    LocationPermission.requestIfNeeded()
+                }
+            }
+        }
 
         init(parent: ClusterMapView) {
             self.parent = parent

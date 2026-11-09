@@ -7,6 +7,8 @@ struct EncounterEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @ObservedObject private var config = ConfigStore.shared
+    @Query(sort: \Girl.createdAt, order: .reverse) private var allGirls: [Girl]
+    @Query(sort: \Place.createdAt, order: .reverse) private var allPlaces: [Place]
 
     @State private var date: Date
     @State private var durationMinutes: Int
@@ -20,12 +22,35 @@ struct EncounterEditView: View {
     @State private var place: Place?
     @State private var riskAlert = false
     @State private var showMore: Bool
+    @State private var confirmDiscard = false
 
     private let originalPhotos: Set<String>
+    private let initialSnapshot: Snapshot
 
-    init(encounter: Encounter?, presetGirls: [Girl], presetDate: Date? = nil) {
+    /// 用来判断有没有改动
+    struct Snapshot: Equatable {
+        var date: Date
+        var durationMinutes: Int
+        var overnight: Bool
+        var count: Int
+        var protection: Protection
+        var condomBroke: Bool
+        var rating: Int
+        var details: EncounterDetails
+        var girlIDs: [UUID]
+        var placeID: UUID?
+    }
+
+    private var snapshot: Snapshot {
+        Snapshot(date: date, durationMinutes: durationMinutes, overnight: overnight, count: count,
+                 protection: protection, condomBroke: condomBroke, rating: rating, details: details,
+                 girlIDs: girls.map(\.id), placeID: place?.id)
+    }
+
+    private var isDirty: Bool { snapshot != initialSnapshot }
+
+    init(encounter: Encounter?, presetGirls: [Girl], presetDate: Date? = nil, presetPlace: Place? = nil) {
         self.encounter = encounter
-        _date = State(initialValue: encounter?.date ?? Self.defaultDate(for: presetDate))
         _durationMinutes = State(initialValue: encounter?.durationMinutes ?? 0)
         _overnight = State(initialValue: encounter?.overnight ?? false)
         _count = State(initialValue: encounter?.count ?? 1)
@@ -34,10 +59,19 @@ struct EncounterEditView: View {
         _rating = State(initialValue: encounter?.rating ?? 0)
         let d = encounter?.details ?? EncounterDetails()
         _details = State(initialValue: d)
-        _girls = State(initialValue: encounter?.girls ?? presetGirls)
-        _place = State(initialValue: encounter?.place)
+        let initialGirls = encounter?.girls ?? presetGirls
+        let initialPlace = encounter?.place ?? presetPlace
+        _girls = State(initialValue: initialGirls)
+        _place = State(initialValue: initialPlace)
         _showMore = State(initialValue: encounter != nil)
         originalPhotos = Set(d.photoIDs)
+        let initialDate = encounter?.date ?? Self.defaultDate(for: presetDate)
+        _date = State(initialValue: initialDate)
+        initialSnapshot = Snapshot(
+            date: initialDate, durationMinutes: encounter?.durationMinutes ?? 0, overnight: encounter?.overnight ?? false,
+            count: encounter?.count ?? 1, protection: encounter?.protection ?? .unrecorded,
+            condomBroke: encounter?.condomBroke ?? false, rating: encounter?.rating ?? 0, details: d,
+            girlIDs: initialGirls.map(\.id), placeID: initialPlace?.id)
     }
 
     /// 从日历选了某天时：今天用现在的时间，其他日子默认晚上 9 点
@@ -100,6 +134,7 @@ struct EncounterEditView: View {
                     }
                 }
             }
+            .formKeyboardHandling()
             .navigationTitle(encounter == nil ? "记一次" : "编辑记录")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -116,8 +151,12 @@ struct EncounterEditView: View {
             } message: {
                 Text(riskMessage)
             }
+            .confirmationDialog("放弃这次的修改？", isPresented: $confirmDiscard, titleVisibility: .visible) {
+                Button("放弃修改", role: .destructive) { discard() }
+                Button("继续编辑", role: .cancel) {}
+            }
         }
-        .interactiveDismissDisabled()
+        .interactiveDismissDisabled(isDirty)
     }
 
     private var riskMessage: String {
@@ -134,8 +173,51 @@ struct EncounterEditView: View {
 
     // MARK: Sections
 
+    /// 最近互动过的人，放在最前面方便一点即选
+    private var quickGirls: [Girl] {
+        let current = allGirls.filter { $0.status.isCurrent }
+        let sorted = current.sorted { ($0.lastInteraction() ?? $0.createdAt) > ($1.lastInteraction() ?? $1.createdAt) }
+        var list = Array(sorted.prefix(12))
+        for g in girls where !list.contains(where: { $0.id == g.id }) {
+            list.insert(g, at: 0)
+        }
+        return list
+    }
+
+    private var quickPlaces: [Place] {
+        let sorted = allPlaces.sorted { ($0.lastUsed ?? $0.createdAt) > ($1.lastUsed ?? $1.createdAt) }
+        var list = Array(sorted.prefix(8))
+        if let place, !list.contains(where: { $0.id == place.id }) {
+            list.insert(place, at: 0)
+        }
+        return list
+    }
+
+    private func toggleGirl(_ g: Girl) {
+        withAnimation(.snappy(duration: 0.25)) {
+            if let i = girls.firstIndex(where: { $0.id == g.id }) {
+                girls.remove(at: i)
+            } else {
+                girls.append(g)
+            }
+        }
+    }
+
     private var whoSection: some View {
         Section {
+            if !quickGirls.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(quickGirls) { g in
+                            QuickPickAvatar(girl: g, selected: girls.contains { $0.id == g.id }) {
+                                toggleGirl(g)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
             NavigationLink {
                 GirlMultiSelectView(selection: $girls)
             } label: {
@@ -143,7 +225,31 @@ struct EncounterEditView: View {
                     Text(girls.isEmpty ? "未选择" : girls.map(\.name).joined(separator: "、"))
                         .foregroundStyle(girls.isEmpty ? HierarchicalShapeStyle.tertiary : HierarchicalShapeStyle.secondary)
                         .lineLimit(1)
+                        .contentTransition(.opacity)
                 }
+            }
+            if !quickPlaces.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(quickPlaces) { p in
+                            let selected = place?.id == p.id
+                            Button {
+                                withAnimation(.snappy(duration: 0.25)) { place = selected ? nil : p }
+                            } label: {
+                                Label(p.displayName, systemImage: p.type.symbol)
+                                    .font(.footnote.weight(.medium))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .foregroundStyle(selected ? Color.white : Color.primary)
+                                    .background(selected ? Color.accentColor : Color.secondary.opacity(0.12), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .sensoryFeedback(.selection, trigger: place?.id)
             }
             NavigationLink {
                 PlaceSelectView(selection: $place)
@@ -286,6 +392,14 @@ struct EncounterEditView: View {
     // MARK: Actions
 
     private func cancel() {
+        if isDirty {
+            confirmDiscard = true
+        } else {
+            discard()
+        }
+    }
+
+    private func discard() {
         let added = Set(details.photoIDs).subtracting(originalPhotos)
         PhotoStore.shared.delete(Array(added))
         dismiss()
@@ -323,6 +437,7 @@ struct EncounterEditView: View {
         PhotoStore.shared.delete(Array(removed))
 
         try? context.save()
+        Haptics.success()
 
         if target.stiRisk || target.pregnancyRisk {
             Reminders.scheduleRiskFollowUps(encounterID: target.id, date: target.date)
@@ -339,6 +454,41 @@ struct EncounterEditView: View {
 }
 
 // MARK: - 选择对象
+
+/// 记录表单里一点即选的头像
+struct QuickPickAvatar: View {
+    let girl: Girl
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                AvatarView(photoID: girl.avatarID, name: girl.name, size: 46)
+                    .overlay(alignment: .bottomTrailing) {
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 17))
+                                .foregroundStyle(.white, Color.accentColor)
+                                .background(Circle().fill(Color(uiColor: .systemBackground)).padding(1))
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .scaleEffect(selected ? 1.0 : 0.94)
+                    .opacity(selected ? 1 : 0.75)
+                Text(girl.name)
+                    .font(.caption2.weight(selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+                    .frame(width: 54)
+            }
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: selected)
+        .accessibilityLabel(girl.name)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
 
 struct GirlMultiSelectView: View {
     @Binding var selection: [Girl]

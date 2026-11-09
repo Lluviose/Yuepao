@@ -8,6 +8,7 @@ struct EncounterListView: View {
     @State private var creating = false
     @State private var search = ""
     @State private var pendingDelete: Encounter?
+    @State private var repeatFrom: Encounter?
 
     private var filtered: [Encounter] {
         let q = search.trimmed
@@ -41,6 +42,14 @@ struct EncounterListView: View {
                             }
                             .swipeActions {
                                 Button("删除", role: .destructive) { pendingDelete = e }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    repeatFrom = e
+                                } label: {
+                                    Label("再记一次", systemImage: "arrow.clockwise.heart")
+                                }
+                                .tint(.accentColor)
                             }
                         }
                     } header: {
@@ -81,6 +90,9 @@ struct EncounterListView: View {
             }
             .sheet(isPresented: $creating) {
                 EncounterEditView(encounter: nil, presetGirls: [])
+            }
+            .sheet(item: $repeatFrom) { e in
+                EncounterEditView(encounter: nil, presetGirls: e.girls, presetPlace: e.place)
             }
             .confirmationDialog("删除这条记录？", isPresented: Binding(
                 get: { pendingDelete != nil },

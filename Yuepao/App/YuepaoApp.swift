@@ -22,6 +22,7 @@ struct RootView: View {
     @ObservedObject private var lock = AppLock.shared
     @Environment(\.scenePhase) private var scenePhase
     @Query private var girls: [Girl]
+    @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
 
     var body: some View {
         ZStack {
@@ -44,6 +45,7 @@ struct RootView: View {
         .onAppear {
             if scenePhase == .active { lock.handle(.active) }
         }
+        .preferredColorScheme(AppearanceMode(rawValue: appearance)?.colorScheme)
     }
 }
 

@@ -49,6 +49,8 @@ struct HaremMapScreen: View {
     @State private var girlFilter: UUID?
     @State private var selection: MapSelection?
     @State private var showCities = false
+    @State private var fitRequest = 0
+    @State private var locateRequest = 0
 
     private var filterGirl: Girl? {
         girlFilter.flatMap { id in girls.first { $0.id == id } }
@@ -87,8 +89,19 @@ struct HaremMapScreen: View {
         let gItems = girlItems
         let pItems = placeItems
         NavigationStack {
-            ClusterMapView(girls: gItems, places: pItems) { selection = $0 }
+            ClusterMapView(girls: gItems, places: pItems, fitRequest: fitRequest, locateRequest: locateRequest) { selection = $0 }
                 .ignoresSafeArea(edges: .bottom)
+                .overlay(alignment: .bottomTrailing) {
+                    VStack(spacing: 0) {
+                        mapButton("location.fill") { locateRequest += 1 }
+                        Divider().frame(width: 28)
+                        mapButton("arrow.up.left.and.arrow.down.right") { fitRequest += 1 }
+                    }
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 24)
+                }
                 .safeAreaInset(edge: .top) {
                     controls(girlCount: gItems.count, placeTotal: pItems.reduce(0) { $0 + $1.count })
                 }
@@ -173,6 +186,19 @@ struct HaremMapScreen: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+
+    private func mapButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.light()
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
     }
 
     private func summaryText(girlCount: Int, placeTotal: Int) -> String {

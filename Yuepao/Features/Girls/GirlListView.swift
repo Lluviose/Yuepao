@@ -13,6 +13,7 @@ struct GirlListView: View {
     @State private var rankFilter: String?
     @State private var creating = false
     @State private var pendingDelete: Girl?
+    @State private var loggingFor: Girl?
     @Namespace private var zoom
 
     private var sort: GirlSort { GirlSort(rawValue: sortRaw) ?? .recent }
@@ -63,6 +64,21 @@ struct GirlListView: View {
                     .swipeActions {
                         Button("删除", role: .destructive) { pendingDelete = girl }
                     }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            loggingFor = girl
+                        } label: {
+                            Label("记一次", systemImage: "heart.fill")
+                        }
+                        .tint(.accentColor)
+                        Button {
+                            withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
+                            Haptics.light()
+                        } label: {
+                            Label("联系过", systemImage: "message.fill")
+                        }
+                        .tint(.teal)
+                    }
                 }
             }
             .overlay {
@@ -96,6 +112,9 @@ struct GirlListView: View {
             }
             .sheet(isPresented: $creating) {
                 GirlEditView(girl: nil)
+            }
+            .sheet(item: $loggingFor) { girl in
+                EncounterEditView(encounter: nil, presetGirls: [girl])
             }
             .confirmationDialog(
                 "删除「\(pendingDelete?.name ?? "")」的档案？",
@@ -183,6 +202,12 @@ struct GirlRow: View {
                     Text(girl.name).font(.headline)
                     if !girl.rank.isEmpty { Badge(text: girl.rank) }
                     Badge(text: girl.status.title, color: girl.status.color)
+                    ForEach(indicators(d), id: \.symbol) { item in
+                        Image(systemName: item.symbol)
+                            .font(.caption2)
+                            .foregroundStyle(item.color)
+                            .accessibilityLabel(item.label)
+                    }
                 }
                 Text(subtitle(d))
                     .font(.caption)
@@ -198,6 +223,27 @@ struct GirlRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// 名字旁边的小图标：生日临近、经期中、被冷落
+    private func indicators(_ d: GirlDetails) -> [(symbol: String, color: Color, label: String)] {
+        var items: [(symbol: String, color: Color, label: String)] = []
+        if let bd = d.birthday, Reminders.daysUntilNext(bd) <= 7 {
+            items.append(("gift.fill", Palette.date, "生日临近"))
+        }
+        if girl.status.isCurrent {
+            let cycle = d.cycle
+            if cycle.isOngoing {
+                items.append(("drop.fill", Palette.period, "经期中"))
+            }
+            if d.contactGoalDays > 0 {
+                let last = girl.lastInteraction(details: d) ?? girl.createdAt
+                if Fmt.days(from: last) > d.contactGoalDays {
+                    items.append(("snowflake", .cyan, "被冷落"))
+                }
+            }
+        }
+        return items
     }
 
     private func subtitle(_ d: GirlDetails) -> String {

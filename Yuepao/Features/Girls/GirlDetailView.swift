@@ -565,7 +565,15 @@ struct GirlDetailView: View {
             PhotoGrid(photoIDs: livePhotoBinding(
                 get: { girl.details.photoIDs },
                 set: { ids in girl.update { $0.photoIDs = ids } }
-            ))
+            ), onSetCover: { id in
+                // 复制一份当头像，这样删相册里的照片不会影响头像
+                guard let data = PhotoStore.shared.rawData(id) else { return }
+                let newID = UUID().uuidString
+                guard PhotoStore.shared.importRaw(data, id: newID) else { return }
+                if let old = girl.avatarID { PhotoStore.shared.delete(old) }
+                withAnimation(.snappy) { girl.avatarID = newID }
+                Haptics.success()
+            })
         }
     }
 

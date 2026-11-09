@@ -12,6 +12,7 @@ struct EncounterDetailView: View {
     var body: some View {
         let d = encounter.details
         List {
+            hero(d)
             riskSection(d)
 
             Section("时间和地点") {
@@ -133,6 +134,63 @@ struct EncounterDetailView: View {
                 }
             }
         }
+    }
+
+    private func hero(_ d: EncounterDetails) -> some View {
+        Section {
+            VStack(spacing: 12) {
+                HStack(spacing: -12) {
+                    ForEach(Array(encounter.girls.prefix(4))) { g in
+                        AvatarView(photoID: g.avatarID, name: g.name, size: 64)
+                            .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 3))
+                    }
+                }
+                VStack(spacing: 4) {
+                    Text(encounter.girlNames)
+                        .font(.title3.weight(.bold))
+                        .fontDesign(.rounded)
+                    Text(Fmt.dateTime(encounter.date) + " " +
+                         encounter.date.formatted(Date.FormatStyle().weekday(.wide).locale(Fmt.locale)))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 8) {
+                    heroPill("×\(encounter.count) 回合", "flame.fill", .pink)
+                    if encounter.durationMinutes > 0 {
+                        heroPill(Choices.durationTitle(encounter.durationMinutes), "clock.fill", .indigo)
+                    }
+                    if encounter.protection != .unrecorded {
+                        heroPill(encounter.protection.title, encounter.protection.symbol, encounter.protection.color)
+                    }
+                }
+                if encounter.rating > 0 {
+                    HStack(spacing: 4) {
+                        ForEach(1...5, id: \.self) { i in
+                            Image(systemName: i <= encounter.rating ? "star.fill" : "star")
+                                .font(.subheadline)
+                                .foregroundStyle(i <= encounter.rating ? Color.orange : Color.secondary.opacity(0.35))
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .listRowBackground(
+                ZStack {
+                    Color(uiColor: .secondarySystemGroupedBackground)
+                    LinearGradient(colors: [Color.accentColor.opacity(0.14), .clear], startPoint: .top, endPoint: .bottom)
+                }
+            )
+        }
+    }
+
+    private func heroPill(_ text: String, _ symbol: String, _ color: Color) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .foregroundStyle(color)
+            .background(color.opacity(0.12), in: Capsule())
     }
 
     @ViewBuilder

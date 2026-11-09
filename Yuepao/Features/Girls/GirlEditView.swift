@@ -3,7 +3,7 @@ import SwiftData
 import PhotosUI
 import CoreLocation
 
-struct GirlDraft {
+struct GirlDraft: Equatable {
     var name = ""
     var status: RelationStatus = .flirting
     var rank = ""
@@ -58,13 +58,19 @@ struct GirlEditView: View {
     @State private var draft: GirlDraft
     @State private var avatarItem: PhotosPickerItem?
     @State private var newPhotoIDs: [String] = []
+    @State private var confirmDiscard = false
     private let originalAvatar: String?
+    private let initialDraft: GirlDraft
 
     init(girl: Girl?) {
         self.girl = girl
-        _draft = State(initialValue: GirlDraft(girl))
+        let d = GirlDraft(girl)
+        _draft = State(initialValue: d)
+        initialDraft = d
         originalAvatar = girl?.avatarID
     }
+
+    private var isDirty: Bool { draft != initialDraft || !newPhotoIDs.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -85,6 +91,7 @@ struct GirlEditView: View {
                     notesSection
                 }
             }
+            .formKeyboardHandling()
             .navigationTitle(girl == nil ? "新建档案" : "编辑档案")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -109,7 +116,11 @@ struct GirlEditView: View {
                 }
             }
         }
-        .interactiveDismissDisabled()
+        .interactiveDismissDisabled(isDirty)
+        .confirmationDialog("放弃这次的修改？", isPresented: $confirmDiscard, titleVisibility: .visible) {
+            Button("放弃修改", role: .destructive) { discard() }
+            Button("继续编辑", role: .cancel) {}
+        }
     }
 
     // MARK: Sections
@@ -370,6 +381,14 @@ struct GirlEditView: View {
     // MARK: Actions
 
     private func cancel() {
+        if isDirty {
+            confirmDiscard = true
+        } else {
+            discard()
+        }
+    }
+
+    private func discard() {
         PhotoStore.shared.delete(newPhotoIDs)
         dismiss()
     }
@@ -392,6 +411,7 @@ struct GirlEditView: View {
         PhotoStore.shared.delete(toDelete)
 
         try? context.save()
+        Haptics.success()
         Reminders.rescheduleDates(girls: isNew ? allGirls + [target] : allGirls)
         dismiss()
     }

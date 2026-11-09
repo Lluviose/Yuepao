@@ -2,7 +2,7 @@ import Foundation
 
 /// 档案的详细字段。整体以 JSON 存在 `Girl.detailsData` 里，
 /// 新增字段只需要在这里加一个带默认值的属性，旧数据会自动补默认值。
-struct GirlDetails: Codable {
+struct GirlDetails: Codable, Equatable {
     // A. 基本信息
     var realName: String = ""
     var birthday: Date?
@@ -186,7 +186,7 @@ struct GiftItem: Codable, Identifiable, Hashable {
 }
 
 /// 约会记录的详细字段
-struct EncounterDetails: Codable {
+struct EncounterDetails: Codable, Equatable {
     var activities: [String] = []
     var initiator: String = ""
     var positions: [String] = []
