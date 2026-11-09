@@ -54,7 +54,7 @@ struct ClusterMapView: UIViewRepresentable {
         map.isPitchEnabled = false
         map.register(PersonPinView.self, forAnnotationViewWithReuseIdentifier: PersonPinView.reuseID)
         map.register(SpotPinView.self, forAnnotationViewWithReuseIdentifier: SpotPinView.reuseID)
-        map.register(ClusterMarkerView.self, forAnnotationViewWithReuseIdentifier: ClusterMarkerView.reuseID)
+        map.register(GroupMarkerView.self, forAnnotationViewWithReuseIdentifier: GroupMarkerView.reuseID)
         map.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 33, longitude: 112),
                                          span: MKCoordinateSpan(latitudeDelta: 26, longitudeDelta: 26)), animated: false)
 
@@ -85,8 +85,14 @@ struct ClusterMapView: UIViewRepresentable {
         var parent: ClusterMapView
         weak var map: MKMapView?
 
+        /// 全部人和地点的标记（包括回放中还没出现的），不一定都在地图上
         private var people: [UUID: PersonAnnotation] = [:]
         private var spots: [UUID: SpotAnnotation] = [:]
+        /// 现在真正放在地图上的：单个标记，或者几个合成的一个
+        private var displayed: [ObjectIdentifier: MKAnnotation] = [:]
+        private var groups: [String: GroupAnnotation] = [:]
+        /// 上次合并时的地图宽度（地图点），缩放明显变化时重新合并
+        private var layoutWidth: Double = 0
         private var draftAnnotation: DraftAnnotation?
         private let markerViews = NSHashTable<MarkerView>.weakObjects()
         private var heatOverlay: HeatOverlay?
@@ -98,11 +104,9 @@ struct ClusterMapView: UIViewRepresentable {
         private var appliedStyle: MapStyle?
         private var appliedChrome: UIEdgeInsets?
         private var didInitialFit = false
-        /// 数据刚变过：这段时间里新出现的标记做入场动画
-        private var animateUntil: CFTimeInterval = 0
-        /// 这一轮新加的标记（只有它们和包含它们的聚合做入场动画）
+        /// 刚加到地图上的标记：只有它们做入场动画
         private var freshKeys = Set<ObjectIdentifier>()
-        private var reclusterScheduled = false
+        private var animateUntil: CFTimeInterval = 0
         private var lastUserCoordinate: CLLocationCoordinate2D?
         private var pendingSelect: MKAnnotation?
         /// 由卡片滑动触发的选中，didSelect 时不再回传给 SwiftUI
@@ -117,7 +121,7 @@ struct ClusterMapView: UIViewRepresentable {
         func update(_ map: MKMapView) {
             applyStyle(map)
             applyChrome(map)
-            syncAnnotations(map)
+            syncItems(map)
             syncHeat(map)
             syncDraft(map)
             applyFocus(map)
@@ -136,89 +140,64 @@ struct ClusterMapView: UIViewRepresentable {
             map.layoutMargins = UIEdgeInsets(top: parent.chrome.top, left: 8, bottom: parent.chrome.bottom, right: 8)
         }
 
-        private func syncAnnotations(_ map: MKMapView) {
-            var toRemove: [MKAnnotation] = []
-            var toAdd: [MKAnnotation] = []
-            var pulsed: [MKAnnotation] = []
-            var appeared: [MKAnnotation] = []
+        /// 把 SwiftUI 传来的人和地点同步成标记对象；成员或位置变了就重新合并
+        private func syncItems(_ map: MKMapView) {
+            var needsLayout = false
             var visualsChanged = false
+            var pulsed = Set<UUID>()
 
             let newPeople = Dictionary(parent.content.people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            for (id, annotation) in people where newPeople[id] == nil {
-                toRemove.append(annotation)
+            for id in Array(people.keys) where newPeople[id] == nil {
                 people[id] = nil
+                needsLayout = true
             }
             for item in parent.content.people {
                 if let existing = people[item.id] {
                     guard existing.item != item else { continue }
                     if existing.item.latitude != item.latitude || existing.item.longitude != item.longitude {
-                        toRemove.append(existing)
-                        let fresh = PersonAnnotation(item)
-                        people[item.id] = fresh
-                        toAdd.append(fresh)
+                        people[item.id] = PersonAnnotation(item)
+                        needsLayout = true
                     } else {
-                        let activated = item.active && !existing.item.active
+                        if existing.item.active != item.active { needsLayout = true }
                         existing.item = item
-                        (map.view(for: existing) as? MarkerView)?.configure()
-                        if activated { appeared.append(existing) }
                         visualsChanged = true
                     }
                 } else {
-                    let fresh = PersonAnnotation(item)
-                    people[item.id] = fresh
-                    toAdd.append(fresh)
+                    people[item.id] = PersonAnnotation(item)
+                    needsLayout = true
                 }
             }
 
             let newSpots = Dictionary(parent.content.spots.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            for (id, annotation) in spots where newSpots[id] == nil {
-                toRemove.append(annotation)
+            for id in Array(spots.keys) where newSpots[id] == nil {
                 spots[id] = nil
+                needsLayout = true
             }
             for item in parent.content.spots {
                 if let existing = spots[item.id] {
                     guard existing.item != item else { continue }
                     if existing.item.latitude != item.latitude || existing.item.longitude != item.longitude {
-                        toRemove.append(existing)
-                        let fresh = SpotAnnotation(item)
-                        spots[item.id] = fresh
-                        toAdd.append(fresh)
+                        spots[item.id] = SpotAnnotation(item)
+                        needsLayout = true
                     } else {
-                        let activated = item.active && !existing.item.active
-                        let grew = item.count > existing.item.count
-                        existing.item = item
-                        (map.view(for: existing) as? MarkerView)?.configure()
-                        if activated {
-                            appeared.append(existing)
-                        } else if grew {
-                            pulsed.append(existing)
+                        if existing.item.active != item.active {
+                            needsLayout = true
+                        } else if item.count > existing.item.count {
+                            pulsed.insert(item.id)
                         }
+                        existing.item = item
                         visualsChanged = true
                     }
                 } else {
-                    let fresh = SpotAnnotation(item)
-                    spots[item.id] = fresh
-                    toAdd.append(fresh)
+                    spots[item.id] = SpotAnnotation(item)
+                    needsLayout = true
                 }
             }
 
-            if !toRemove.isEmpty { map.removeAnnotations(toRemove) }
-            if !toAdd.isEmpty {
-                animateUntil = CACurrentMediaTime() + 0.8
-                freshKeys = Set(toAdd.map { ObjectIdentifier($0) })
-                map.addAnnotations(toAdd)
-                if didInitialFit { scheduleRecluster(map) }
-            }
-            if visualsChanged { refreshClusters(pulse: pulsed + appeared) }
-            for a in pulsed {
-                (map.view(for: a) as? MarkerView)?.pulse()
-            }
-            for a in appeared {
-                guard let view = map.view(for: a) as? MarkerView else { continue }
-                view.appear(delay: 0, alpha: view.alpha)
-            }
+            if needsLayout { relayout(map) }
+            if visualsChanged { refreshVisibleMarkers(map, pulse: pulsed) }
 
-            if !didInitialFit, !toAdd.isEmpty || !parent.content.heat.isEmpty {
+            if !didInitialFit, !people.isEmpty || !spots.isEmpty || !parent.content.heat.isEmpty {
                 didInitialFit = true
                 DispatchQueue.main.async { [weak self] in
                     self?.fitAll(animated: false)
@@ -226,28 +205,108 @@ struct ClusterMapView: UIViewRepresentable {
             }
         }
 
-        /// MapKit 只在镜头变化时重新计算聚合，后加进来的标记不会和已有的合并。
-        /// 等新标记的视图建好后，把镜头缩放千分之一（肉眼看不出），让它重新算一遍。
-        private func scheduleRecluster(_ map: MKMapView) {
-            guard !reclusterScheduled else { return }
-            reclusterScheduled = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak map] in
-                guard let self, let map else { return }
-                self.reclusterScheduled = false
-                let rect = map.visibleMapRect
-                map.setVisibleMapRect(rect.insetBy(dx: -rect.size.width * 0.0005, dy: -rect.size.height * 0.0005),
-                                      animated: false)
+        // MARK: 合并
+
+        /// 按当前缩放，把屏幕上挨得太近的标记合成一个（人和人合，地点和地点合）。
+        /// 不用 MapKit 自带的聚合：它在镜头变化、逐个加入标记时经常不重新合并。
+        private func relayout(_ map: MKMapView) {
+            guard map.bounds.width > 1, map.bounds.height > 1 else { return }
+            layoutWidth = map.visibleMapRect.size.width
+            var desired: [MKAnnotation] = []
+            var nextGroups: [String: GroupAnnotation] = [:]
+
+            let activePeople = people.values
+                .filter { $0.item.active }
+                .sorted { $0.item.id.uuidString < $1.item.id.uuidString }
+            for cluster in clusters(of: activePeople, radius: 46, in: map) {
+                if cluster.count == 1 {
+                    desired.append(cluster[0])
+                    continue
+                }
+                let key = "p:" + cluster.map(\.item.id.uuidString).sorted().joined(separator: ",")
+                let group = groups[key] ?? GroupAnnotation(people: cluster, key: key)
+                nextGroups[key] = group
+                desired.append(group)
+            }
+
+            let activeSpots = spots.values
+                .filter { $0.item.active }
+                .sorted { ($0.item.count, $0.item.id.uuidString) > ($1.item.count, $1.item.id.uuidString) }
+            for cluster in clusters(of: activeSpots, radius: 40, in: map) {
+                if cluster.count == 1 {
+                    desired.append(cluster[0])
+                    continue
+                }
+                let key = "s:" + cluster.map(\.item.id.uuidString).sorted().joined(separator: ",")
+                let group = groups[key] ?? GroupAnnotation(spots: cluster, key: key)
+                nextGroups[key] = group
+                desired.append(group)
+            }
+
+            groups = nextGroups
+            let wanted = Set(desired.map { ObjectIdentifier($0) })
+            let toRemove = displayed.filter { !wanted.contains($0.key) }.map(\.value)
+            let toAdd = desired.filter { displayed[ObjectIdentifier($0)] == nil }
+            displayed = Dictionary(desired.map { (ObjectIdentifier($0), $0) }, uniquingKeysWith: { a, _ in a })
+
+            if !toRemove.isEmpty { map.removeAnnotations(toRemove) }
+            if !toAdd.isEmpty {
+                freshKeys = Set(toAdd.map { ObjectIdentifier($0) })
+                animateUntil = CACurrentMediaTime() + 0.6
+                map.addAnnotations(toAdd)
+            }
+            restoreFocusSelection(map)
+        }
+
+        /// 贪心合并：按顺序取一个还没归组的标记，把屏幕上离它 radius 以内的都并进来
+        private func clusters<A: MKAnnotation>(of items: [A], radius: CGFloat, in map: MKMapView) -> [[A]] {
+            let points = items.map { map.convert($0.coordinate, toPointTo: map) }
+            var used = [Bool](repeating: false, count: items.count)
+            var result: [[A]] = []
+            for i in items.indices where !used[i] {
+                used[i] = true
+                var cluster = [items[i]]
+                for j in items.indices where !used[j] {
+                    let dx = points[i].x - points[j].x
+                    let dy = points[i].y - points[j].y
+                    if dx * dx + dy * dy < radius * radius {
+                        used[j] = true
+                        cluster.append(items[j])
+                    }
+                }
+                result.append(cluster)
+            }
+            return result
+        }
+
+        /// 数字、头像等变了：重画地图上的标记；次数增加的跳一下
+        private func refreshVisibleMarkers(_ map: MKMapView, pulse: Set<UUID>) {
+            for annotation in displayed.values {
+                guard let view = map.view(for: annotation) as? MarkerView else { continue }
+                view.configure()
+                let ids: [UUID]
+                if let p = annotation as? PersonAnnotation {
+                    ids = [p.item.id]
+                } else if let s = annotation as? SpotAnnotation {
+                    ids = [s.item.id]
+                } else if let g = annotation as? GroupAnnotation {
+                    ids = g.people.map { $0.item.id } + g.spots.map { $0.item.id }
+                } else {
+                    ids = []
+                }
+                if ids.contains(where: { pulse.contains($0) }) { view.pulse() }
             }
         }
 
-        /// 聚合标记的图不会自己更新，成员数字变了要手动重画
-        private func refreshClusters(pulse: [MKAnnotation]) {
-            for view in markerViews.allObjects {
-                guard let cluster = view.annotation as? MKClusterAnnotation else { continue }
-                view.configure()
-                if pulse.contains(where: { p in cluster.memberAnnotations.contains { $0 === p } }) {
-                    view.pulse()
-                }
+        /// 重新合并后，选中的标记如果又单独露出来了，把选中状态补回去
+        private func restoreFocusSelection(_ map: MKMapView) {
+            guard let focus = appliedFocus, let annotation = annotation(for: focus),
+                  displayed[ObjectIdentifier(annotation)] != nil,
+                  !map.selectedAnnotations.contains(where: { $0 === annotation }) else { return }
+            DispatchQueue.main.async { [weak self, weak map] in
+                guard let self, let map, self.appliedFocus == focus, map.view(for: annotation) != nil else { return }
+                self.programmaticFocus = focus
+                map.selectAnnotation(annotation, animated: false)
             }
         }
 
@@ -327,7 +386,7 @@ struct ClusterMapView: UIViewRepresentable {
             guard appliedFocus != nil else { return true }
             if let p = annotation as? PersonAnnotation { return related.contains(p.item.id) }
             if let s = annotation as? SpotAnnotation { return related.contains(s.item.id) }
-            if let c = annotation as? MKClusterAnnotation { return c.memberAnnotations.contains { isRelated($0) } }
+            if let g = annotation as? GroupAnnotation { return g.members.contains { isRelated($0) } }
             return true
         }
 
@@ -384,8 +443,8 @@ struct ClusterMapView: UIViewRepresentable {
                                     dy: -(max(minSide - rect.size.height, 0) / 2))
             }
             let insets = visibleInsets(map)
-            // 头像标记在坐标上方，顶部多留一点
-            let padding = UIEdgeInsets(top: insets.top + 72, left: 48, bottom: insets.bottom + 28, right: 48)
+            // 头像标记在坐标上方、地点胶囊在下方，上下都留一点
+            let padding = UIEdgeInsets(top: insets.top + 72, left: 48, bottom: insets.bottom + 40, right: 48)
             map.setVisibleMapRect(rect, edgePadding: padding, animated: animated)
         }
 
@@ -427,9 +486,8 @@ struct ClusterMapView: UIViewRepresentable {
             guard let map, let annotation = annotation(for: focus) else { return }
             programmaticFocus = focus
             let coordinate = annotation.coordinate
-            let onScreen = map.visibleMapRect.contains(MKMapPoint(coordinate))
-            if map.view(for: annotation) == nil && onScreen {
-                // 藏在聚合里：拉近一些让它单独露出来
+            if displayed[ObjectIdentifier(annotation)] == nil {
+                // 合并在别的标记里：拉近到它能单独显示
                 let meters = max(min(map.region.span.latitudeDelta * 111_000 * 0.3, 6000), 900)
                 let side = meters * MKMapPointsPerMeterAtLatitude(coordinate.latitude)
                 let p = MKMapPoint(coordinate)
@@ -469,8 +527,8 @@ struct ClusterMapView: UIViewRepresentable {
             switch annotation {
             case is MKUserLocation:
                 return nil
-            case let cluster as MKClusterAnnotation:
-                view = mapView.dequeueReusableAnnotationView(withIdentifier: ClusterMarkerView.reuseID, for: cluster)
+            case let group as GroupAnnotation:
+                view = mapView.dequeueReusableAnnotationView(withIdentifier: GroupMarkerView.reuseID, for: group)
             case is PersonAnnotation:
                 view = mapView.dequeueReusableAnnotationView(withIdentifier: PersonPinView.reuseID, for: annotation)
             case is SpotAnnotation:
@@ -499,14 +557,8 @@ struct ClusterMapView: UIViewRepresentable {
             guard CACurrentMediaTime() < animateUntil else { return }
             var order = 0
             for view in views {
-                guard let marker = view as? MarkerView, let annotation = view.annotation else { continue }
-                let isFresh: Bool
-                if let cluster = annotation as? MKClusterAnnotation {
-                    isFresh = cluster.memberAnnotations.contains { freshKeys.contains(ObjectIdentifier($0)) }
-                } else {
-                    isFresh = freshKeys.contains(ObjectIdentifier(annotation))
-                }
-                guard isFresh else { continue }
+                guard let marker = view as? MarkerView, let annotation = view.annotation,
+                      freshKeys.contains(ObjectIdentifier(annotation)) else { continue }
                 marker.appear(delay: min(Double(order) * 0.03, 0.3), alpha: marker.alpha)
                 order += 1
             }
@@ -524,9 +576,9 @@ struct ClusterMapView: UIViewRepresentable {
                 mapView.deselectAnnotation(annotation, animated: false)
                 return
             }
-            if let cluster = annotation as? MKClusterAnnotation {
-                mapView.deselectAnnotation(cluster, animated: false)
-                let members = cluster.memberAnnotations
+            if let group = annotation as? GroupAnnotation {
+                mapView.deselectAnnotation(group, animated: false)
+                let members = group.members
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 if spread(of: members) > 40 && mapView.region.span.latitudeDelta > 0.004 {
                     fit(mapView, to: members.map { $0.coordinate }, animated: true)
@@ -550,10 +602,23 @@ struct ClusterMapView: UIViewRepresentable {
             DispatchQueue.main.async { self.parent.onFocus(tapped) }
         }
 
+        /// 拖动缩放过程中，缩放变化够大就重新合并，标记会跟着分开或合拢
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            let width = mapView.visibleMapRect.size.width
+            guard layoutWidth > 0, abs(width / layoutWidth - 1) > 0.15 else { return }
+            relayout(mapView)
+        }
+
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            let width = mapView.visibleMapRect.size.width
+            let hasItems = !people.isEmpty || !spots.isEmpty
+            if layoutWidth == 0 || abs(width / layoutWidth - 1) > 0.01 || (displayed.isEmpty && hasItems) {
+                relayout(mapView)
+            }
             guard let pending = pendingSelect else { return }
             pendingSelect = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak mapView] in
+            guard displayed[ObjectIdentifier(pending)] != nil else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak mapView] in
                 guard let self, let mapView, mapView.view(for: pending) != nil else { return }
                 self.select(pending, in: mapView)
             }

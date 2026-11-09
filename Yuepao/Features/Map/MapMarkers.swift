@@ -25,6 +25,54 @@ final class SpotAnnotation: NSObject, MKAnnotation {
     }
 }
 
+/// 屏幕上挨得太近的几个人（或几个地点）合成的一个标记。
+/// 合并由我们自己按屏幕距离计算，不用 MapKit 自带的聚合：
+/// 那套在镜头变化、回放逐个加入时经常不重新合并。
+final class GroupAnnotation: NSObject, MKAnnotation {
+    enum Kind { case people, spots }
+
+    let kind: Kind
+    /// 成员 ID 排序后拼起来，成员不变就复用同一个对象
+    let key: String
+    let coordinate: CLLocationCoordinate2D
+    let people: [PersonAnnotation]
+    let spots: [SpotAnnotation]
+
+    var title: String? {
+        kind == .people ? "\(people.count) 人" : "\(spots.count) 个地点"
+    }
+
+    var members: [MKAnnotation] {
+        switch kind {
+        case .people: return people
+        case .spots: return spots
+        }
+    }
+
+    init(people: [PersonAnnotation], key: String) {
+        kind = .people
+        self.key = key
+        self.people = people
+        self.spots = []
+        coordinate = GroupAnnotation.centroid(people.map(\.coordinate))
+    }
+
+    init(spots: [SpotAnnotation], key: String) {
+        kind = .spots
+        self.key = key
+        self.people = []
+        self.spots = spots
+        coordinate = GroupAnnotation.centroid(spots.map(\.coordinate))
+    }
+
+    static func centroid(_ coords: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D {
+        guard !coords.isEmpty else { return CLLocationCoordinate2D(latitude: 0, longitude: 0) }
+        let lat = coords.reduce(0) { $0 + $1.latitude } / Double(coords.count)
+        let lon = coords.reduce(0) { $0 + $1.longitude } / Double(coords.count)
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+}
+
 /// 长按放下的待新建地点
 final class DraftAnnotation: NSObject, MKAnnotation {
     let coordinate: CLLocationCoordinate2D
@@ -135,22 +183,9 @@ class MarkerView: MKAnnotationView {
 final class PersonPinView: MarkerView {
     static let reuseID = "person"
 
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        clusteringIdentifier = "person"
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func prepareForDisplay() {
-        clusteringIdentifier = "person"
-        super.prepareForDisplay()
-    }
-
     override func configure() {
         guard let a = annotation as? PersonAnnotation else { return }
         apply(MarkerRenderer.person(a.item, selected: isSelected, traits: traitCollection))
-        setActive(a.item.active)
         accessibilityLabel = a.item.name
         accessibilityIdentifier = "pin-\(a.item.name)"
     }
@@ -159,55 +194,30 @@ final class PersonPinView: MarkerView {
 final class SpotPinView: MarkerView {
     static let reuseID = "spot"
 
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        clusteringIdentifier = "spot"
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func prepareForDisplay() {
-        clusteringIdentifier = "spot"
-        super.prepareForDisplay()
-    }
-
     override func configure() {
         guard let a = annotation as? SpotAnnotation else { return }
         apply(MarkerRenderer.spot(a.item, selected: isSelected, traits: traitCollection))
-        setActive(a.item.active)
         accessibilityLabel = "\(a.item.name)，\(a.item.count) 次"
         accessibilityIdentifier = "spot-\(a.item.name)"
     }
 }
 
-final class ClusterMarkerView: MarkerView {
-    static let reuseID = "cluster"
+/// 合并后的标记：叠放的头像，或者叠放的地点胶囊
+final class GroupMarkerView: MarkerView {
+    static let reuseID = "group"
 
     override func configure() {
-        guard let cluster = annotation as? MKClusterAnnotation else { return }
-        let members = cluster.memberAnnotations
-        let people = members.compactMap { ($0 as? PersonAnnotation)?.item }
-        if !people.isEmpty {
-            // 回放中只画已经出现的人；只剩一个时画成普通头像
-            let active = people.filter(\.active)
-            if active.count == 1 {
-                apply(MarkerRenderer.person(active[0], selected: false, traits: traitCollection))
-            } else {
-                apply(MarkerRenderer.personCluster(active.isEmpty ? people : active, traits: traitCollection))
-            }
-            setActive(!active.isEmpty)
-            accessibilityLabel = "\(active.count) 人"
+        guard let group = annotation as? GroupAnnotation else { return }
+        switch group.kind {
+        case .people:
+            let people = group.people.map(\.item)
+            apply(MarkerRenderer.personCluster(people, traits: traitCollection))
+            accessibilityLabel = "\(people.count) 人"
             accessibilityIdentifier = "cluster-people"
-        } else {
-            let spots = members.compactMap { ($0 as? SpotAnnotation)?.item }
-            let active = spots.filter(\.active)
-            if active.count == 1 {
-                apply(MarkerRenderer.spot(active[0], selected: false, traits: traitCollection))
-            } else {
-                apply(MarkerRenderer.spotCluster(active.isEmpty ? spots : active, traits: traitCollection))
-            }
-            setActive(!active.isEmpty)
-            accessibilityLabel = "\(active.count) 个地点"
+        case .spots:
+            let spots = group.spots.map(\.item)
+            apply(MarkerRenderer.spotCluster(spots, traits: traitCollection))
+            accessibilityLabel = "\(spots.count) 个地点"
             accessibilityIdentifier = "cluster-spots"
         }
     }
