@@ -78,6 +78,9 @@ enum TimelineBuilder {
             var parts: [String] = []
             if let place = e.place { parts.append(place.displayName) }
             parts.append("\(e.count) 回合")
+            let d = e.details
+            if let intensity = Intensity.title(d.intensity) { parts.append(intensity) }
+            parts.append(contentsOf: d.toys.prefix(2))
             if e.girls.count > 1 { parts.append("多人") }
             if e.rating > 0 { parts.append(String(repeating: "★", count: e.rating)) }
             list.append(TimelineEvent(id: "e-\(e.id)", date: e.date, kind: .encounter, title: "约会",
@@ -223,7 +226,7 @@ struct GirlTimelineView: View {
             }
         }
         .sheet(isPresented: $addingMemo) {
-            NoteSheet(title: "加一条备忘") { note in
+            NoteSheet(title: "加一条备忘", girl: girl, prompt: "发生了什么、想记住的细节…") { note in
                 withAnimation(.snappy) {
                     girl.update { $0.memos.append(note); $0.memos.sort { $0.date > $1.date } }
                 }

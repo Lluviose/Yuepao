@@ -59,6 +59,11 @@ enum TestSupport {
             d.birthday = cal.date(from: DateComponents(year: 1999, month: 3, day: 28))
             d.channel = "Soul"; d.metDate = daysAgo(90, hour: 20); d.ratingOverall = 7; d.intimacy = 60
             d.occupation = "护士"; d.contactGoalDays = 7
+            d.height = 168; d.weight = 50; d.cup = "B"; d.bodyType = "苗条"
+            d.ratingLooks = 8; d.ratingBody = 9; d.ratingSex = 9; d.ratingPersonality = 7
+            d.mbti = "INFP"; d.personality = ["温柔", "独立"]
+            d.favoriteFood = "泰餐、甜品"; d.hobbies = "瑜伽、看展"; d.drinks = "冰美式"
+            d.awarenessLevel = .suspects
             d.traits = ["恋痛", "M 倾向", "喜欢被支配", "叫声大"]
             d.safeWord = "红灯"
             d.likedPlay = ["束缚", "拍打"]

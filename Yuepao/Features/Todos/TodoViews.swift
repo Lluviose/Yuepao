@@ -360,6 +360,7 @@ struct TodoEditView: View {
                     Toggle(isOn: $hasTime.animation(.snappy)) {
                         Label("具体时间", systemImage: "clock")
                     }
+                    .tint(.accentColor)
                     .padding(.vertical, 8)
                     if hasTime {
                         DatePicker("时间", selection: $date, displayedComponents: .hourAndMinute)
@@ -369,6 +370,7 @@ struct TodoEditView: View {
                     Toggle(isOn: $remind) {
                         Label(remind && !hasTime ? "提醒我（当天 9:00）" : "提醒我", systemImage: "bell")
                     }
+                    .tint(.accentColor)
                     .padding(.vertical, 8)
                 }
                 .padding(.horizontal, 14)

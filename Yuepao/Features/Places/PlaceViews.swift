@@ -43,46 +43,70 @@ struct PlaceEditView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("名称（如：xx酒店 / 她家）", text: $name)
-                    Picker("类型", selection: $type) {
-                        ForEach(PlaceType.allCases) { t in
-                            Label(t.title, systemImage: t.symbol).tag(t)
-                        }
+            ScrollView {
+                VStack(spacing: 14) {
+                    RecordCard {
+                        TextField("名称，比如 xx 酒店、她家", text: $name)
+                            .font(Typo.display(24))
+                            .accessibilityIdentifier("placeName")
+                        typeGrid
                     }
-                }
 
-                Section("位置") {
-                    NavigationLink {
-                        LocationPickerView(initial: coordinate) { picked in
-                            latitude = picked.coordinate.latitude
-                            longitude = picked.coordinate.longitude
-                            if name.trimmed.isEmpty { name = picked.name }
-                            if !picked.city.isEmpty { city = picked.city }
-                            if !picked.district.isEmpty { district = picked.district }
-                            if !picked.address.isEmpty { address = picked.address }
+                    RecordCard("位置") {
+                        NavigationLink {
+                            LocationPickerView(initial: coordinate) { picked in
+                                latitude = picked.coordinate.latitude
+                                longitude = picked.coordinate.longitude
+                                if name.trimmed.isEmpty { name = picked.name }
+                                if !picked.city.isEmpty { city = picked.city }
+                                if !picked.district.isEmpty { district = picked.district }
+                                if !picked.address.isEmpty { address = picked.address }
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                IconBadge(symbol: "mappin.and.ellipse", color: .accentColor, size: 32)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("地图选点")
+                                        .foregroundStyle(.primary)
+                                    Text(coordinate == nil ? "选好后会出现在地图上" : "已设置，点这里调整")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
                         }
-                    } label: {
-                        LabeledContent("地图选点") {
-                            Text(coordinate == nil ? "未设置" : "已设置")
-                                .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        if let coordinate {
+                            MiniMap(coordinate: coordinate, height: 150)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
+                        CardField(title: "城市", text: $city)
+                        Divider()
+                        CardField(title: "区", text: $district)
+                        Divider()
+                        CardField(title: "地址", text: $address, multiline: true)
                     }
-                    if let coordinate {
-                        MiniMap(coordinate: coordinate)
-                    }
-                    TextField("城市", text: $city)
-                    TextField("区", text: $district)
-                    TextField("地址", text: $address, axis: .vertical)
-                }
 
-                Section("评价") {
-                    LabeledContent("评分") { StarRating(value: $rating) }
-                    TextField("备注（价格、房型、隔音、方便程度…）", text: $note, axis: .vertical)
-                        .lineLimit(2...6)
+                    RecordCard("评价") {
+                        HStack {
+                            Text("评分")
+                            Spacer(minLength: 8)
+                            StarPicker(value: $rating, identifier: "placeRating")
+                        }
+                        Divider()
+                        TextField("备注：价格、房型、隔音、方不方便…", text: $note, axis: .vertical)
+                            .lineLimit(2...6)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 36)
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .formKeyboardHandling()
             .navigationTitle(place == nil ? "新建地点" : "编辑地点")
             .navigationBarTitleDisplayMode(.inline)
@@ -92,9 +116,44 @@ struct PlaceEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }
+                        .fontWeight(.semibold)
                 }
             }
         }
+    }
+
+    /// 地点类型：一格一个，选中的描边
+    private var typeGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+            ForEach(PlaceType.allCases) { t in
+                let on = type == t
+                Button {
+                    withAnimation(.snappy(duration: 0.22)) { type = t }
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: t.symbol)
+                            .font(.system(size: 18))
+                            .symbolRenderingMode(.hierarchical)
+                            .frame(height: 22)
+                        Text(t.title)
+                            .font(.caption.weight(on ? .semibold : .regular))
+                    }
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(on ? Color.accentColor.opacity(0.12) : Color(uiColor: .tertiarySystemFill).opacity(0.7)))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(on ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t.title)
+                .accessibilityAddTraits(on ? .isSelected : [])
+                .accessibilityIdentifier("placeType-\(t.rawValue)")
+            }
+        }
+        .sensoryFeedback(.selection, trigger: type)
     }
 
     private func save() {

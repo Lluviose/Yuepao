@@ -393,6 +393,17 @@ struct EncounterEditView: View {
         }
     }
 
+    /// 「安全词：红灯」，多人时带上名字
+    private var safeWords: String {
+        let pairs = girls.compactMap { g -> (String, String)? in
+            let word = g.details.safeWord.trimmed
+            return word.isEmpty ? nil : (g.name, word)
+        }
+        guard !pairs.isEmpty else { return "" }
+        if pairs.count == 1 { return "安全词：\(pairs[0].1)" }
+        return "安全词：" + pairs.map { "\($0.0) \($0.1)" }.joined(separator: "，")
+    }
+
     private var processCard: some View {
         RecordCard("过程") {
             HStack(spacing: 10) {
@@ -412,6 +423,16 @@ struct EncounterEditView: View {
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "强度", value: Intensity.title(details.intensity))
                 IntensityPicker(value: $details.intensity)
+                // 玩得重的时候，把她约好的安全词放在眼前
+                if details.intensity >= Intensity.intense.rawValue {
+                    let words = safeWords
+                    if !words.isEmpty {
+                        Label(words, systemImage: "lock.shield")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity)
+                    }
+                }
             }
             .padding(.top, 2)
             VStack(alignment: .leading, spacing: 10) {

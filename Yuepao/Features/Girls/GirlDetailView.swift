@@ -94,22 +94,30 @@ struct GirlDetailView: View {
         case .encounter:
             EncounterEditView(encounter: nil, presetGirls: [girl])
         case .memo:
-            NoteSheet(title: "加一条备忘") { note in
-                girl.update { $0.memos.append(note); $0.memos.sort { $0.date > $1.date } }
+            NoteSheet(title: "加一条备忘", girl: girl, prompt: "发生了什么、想记住的细节…") { note in
+                withAnimation(.snappy) {
+                    girl.update { $0.memos.append(note); $0.memos.sort { $0.date > $1.date } }
+                }
             }
         case .said:
-            NoteSheet(title: "她说过的事") { note in
-                girl.update { $0.saidNotes.append(note); $0.saidNotes.sort { $0.date > $1.date } }
+            NoteSheet(title: "她说过的事", girl: girl, prompt: "她提到的家人、经历、计划、喜好…") { note in
+                withAnimation(.snappy) {
+                    girl.update { $0.saidNotes.append(note); $0.saidNotes.sort { $0.date > $1.date } }
+                }
                 AchievementCenter.shared.refresh(context: context)
             }
         case .gift:
             GiftSheet { gift in
-                girl.update { $0.gifts.append(gift); $0.gifts.sort { $0.date > $1.date } }
+                withAnimation(.snappy) {
+                    girl.update { $0.gifts.append(gift); $0.gifts.sort { $0.date > $1.date } }
+                }
                 AchievementCenter.shared.refresh(context: context)
             }
         case .date:
             ImportantDateSheet { item in
-                girl.update { $0.importantDates.append(item) }
+                withAnimation(.snappy) {
+                    girl.update { $0.importantDates.append(item) }
+                }
                 Reminders.rescheduleDates(girls: allGirls)
             }
         case .period:
@@ -300,16 +308,27 @@ struct GirlDetailView: View {
     private func bodyInfo(_ d: GirlDetails) -> some View {
         if d.hasBodyInfo {
             Section("身材外貌") {
-                if let h = d.height { InfoRow(label: "身高", value: "\(h) cm") }
-                if let w = d.weight { InfoRow(label: "体重", value: "\(w) kg") }
-                if !d.cup.isEmpty { InfoRow(label: "罩杯", value: d.cup) }
-                if d.bust != nil || d.waist != nil || d.hips != nil {
-                    InfoRow(label: "三围", value: [d.bust, d.waist, d.hips].map { $0.map { String($0) } ?? "?" }.joined(separator: " / "))
+                let metrics = bodyMetrics(d)
+                if !metrics.isEmpty {
+                    MetricStrip(items: metrics)
+                        .padding(.vertical, 8)
                 }
                 if !d.bodyType.isEmpty { InfoRow(label: "体型", value: d.bodyType) }
                 if !d.appearance.isEmpty { TextBlock(label: "外貌特征", text: d.appearance) }
             }
         }
+    }
+
+    private func bodyMetrics(_ d: GirlDetails) -> [MetricItem] {
+        var items: [MetricItem] = []
+        if let h = d.height { items.append(MetricItem(label: "身高", value: "\(h)", unit: "cm")) }
+        if let w = d.weight { items.append(MetricItem(label: "体重", value: "\(w)", unit: "kg")) }
+        if !d.cup.isEmpty { items.append(MetricItem(label: "罩杯", value: d.cup)) }
+        if d.bust != nil || d.waist != nil || d.hips != nil {
+            let value = [d.bust, d.waist, d.hips].map { v in v.map { "\($0)" } ?? "?" }.joined(separator: "·")
+            items.append(MetricItem(label: "三围", value: value))
+        }
+        return items
     }
 
     @ViewBuilder
@@ -338,8 +357,19 @@ struct GirlDetailView: View {
     private func metInfo(_ d: GirlDetails) -> some View {
         if d.hasMetInfo {
             Section("认识经过") {
-                if !d.channel.isEmpty { InfoRow(label: "渠道", value: d.channel) }
-                if let m = d.metDate { InfoRow(label: "认识日期", value: Fmt.date(m)) }
+                if d.metDate != nil || !d.channel.isEmpty {
+                    HStack(alignment: .top, spacing: 12) {
+                        IconBadge(symbol: "bubble.left.and.bubble.right", color: .accentColor, size: 32)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(d.metDate.map { Fmt.date($0) } ?? d.channel)
+                                .font(Typo.display(17))
+                            Text(metLine(d))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
                 if let f = d.firstDateDate { InfoRow(label: "首次见面", value: Fmt.date(f)) }
                 if !d.introducer.isEmpty { InfoRow(label: "介绍人", value: d.introducer) }
                 if !d.howWeMet.isEmpty { TextBlock(label: "经过", text: d.howWeMet) }
@@ -347,14 +377,24 @@ struct GirlDetailView: View {
         }
     }
 
+    /// 「通过「探探」认识 · 已经认识 213 天」
+    private func metLine(_ d: GirlDetails) -> String {
+        var parts: [String] = []
+        if d.metDate != nil, !d.channel.isEmpty { parts.append("通过「\(d.channel)」认识") }
+        if d.metDate == nil { parts.append("认识渠道") }
+        if let met = d.metDate { parts.append("已经认识 \(max(Fmt.days(from: met), 0)) 天") }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
     private func haremInfo(_ d: GirlDetails) -> some View {
         Section("后宫属性") {
-            VStack(alignment: .leading, spacing: 6) {
-                LabeledContent("亲密度", value: "\(d.intimacy) / 100")
-                ProgressView(value: Double(d.intimacy), total: 100).tint(girl.status.color)
-            }
-            ForEach(scoreEntries(d)) { item in
-                InfoRow(label: item.label, value: "\(item.value) 分")
+            IntimacyMeter(value: d.intimacy, tint: girl.status.color)
+                .padding(.vertical, 4)
+            let scores = scoreEntries(d)
+            if !scores.isEmpty {
+                ScoreBarsView(entries: scores)
+                    .padding(.vertical, 4)
             }
             if d.awarenessLevel != .unset {
                 InfoRow(label: "她知道你有别人吗", value: d.awarenessLevel.title)
@@ -394,7 +434,7 @@ struct GirlDetailView: View {
     private func saidSection(_ d: GirlDetails) -> some View {
         Section {
             ForEach(d.saidNotes) { note in
-                NoteRow(note: note)
+                QuoteRow(note: note)
             }
             .onDelete { idx in girl.update { $0.saidNotes.remove(atOffsets: idx) } }
             Button { sheet = .said } label: { Label("记一条", systemImage: "plus") }
@@ -554,10 +594,10 @@ struct GirlDetailView: View {
     private func datesSection(_ d: GirlDetails) -> some View {
         Section("重要日期") {
             if let bd = d.birthday {
-                LabeledContent("生日", value: "\(Fmt.shortDate(bd)) · \(Reminders.daysUntilNext(bd)) 天后")
+                DateCountdownRow(title: "生日", symbol: "gift", date: bd, isBirthday: true)
             }
             ForEach(d.importantDates) { item in
-                LabeledContent(item.title, value: "\(Fmt.date(item.date)) · \(Reminders.daysUntilNext(item.date)) 天后")
+                DateCountdownRow(title: item.title, symbol: item.remind ? "bell" : "calendar", date: item.date)
             }
             .onDelete { idx in
                 girl.update { $0.importantDates.remove(atOffsets: idx) }
@@ -570,15 +610,7 @@ struct GirlDetailView: View {
     private func giftSection(_ d: GirlDetails) -> some View {
         Section {
             ForEach(d.gifts) { gift in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(gift.item.isEmpty ? gift.occasion : gift.item)
-                        Text([Fmt.date(gift.date), gift.occasion].filter { !$0.isEmpty }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text(Fmt.money(gift.amount)).foregroundStyle(.secondary)
-                }
+                GiftRow(gift: gift)
             }
             .onDelete { idx in girl.update { $0.gifts.remove(atOffsets: idx) } }
             Button { sheet = .gift } label: { Label("记一笔礼物 / 红包", systemImage: "gift") }
@@ -703,15 +735,126 @@ struct StatCell: View {
     }
 }
 
-struct NoteRow: View {
+/// 她说过的话：金色引号 + 衬线正文
+struct QuoteRow: View {
     let note: NoteItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(note.text).textSelection(.enabled)
-            Text(Fmt.date(note.date)).font(.caption).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 10) {
+            Text("\u{201C}")
+                .font(.system(size: 30, weight: .bold, design: .serif))
+                .foregroundStyle(Palette.gold.opacity(0.75))
+                .frame(width: 14, height: 20, alignment: .top)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(note.text)
+                    .font(Typo.display(16, weight: .regular))
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                Text(Fmt.date(note.date))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// 生日、纪念日：右边是还有几天
+struct DateCountdownRow: View {
+    let title: String
+    let symbol: String
+    let date: Date
+    var isBirthday = false
+
+    private var days: Int { Reminders.daysUntilNext(date) }
+
+    /// 生日：这次满几岁；纪念日：第几周年
+    private var detail: String {
+        let years = (Fmt.age(date) ?? 0) + (days == 0 ? 0 : 1)
+        if isBirthday { return "\(Fmt.shortDate(date)) · 将满 \(years) 岁" }
+        return years > 0 ? "\(Fmt.date(date)) · \(years) 周年" : Fmt.date(date)
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: symbol, color: Palette.gold, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if days == 0 {
+                Text("就是今天")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Palette.gold))
+            } else {
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(days)")
+                        .font(Typo.display(22, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(days <= 7 ? Palette.gold : Color.primary)
+                    Text("天后")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// 礼物和红包
+struct GiftRow: View {
+    let gift: GiftItem
+
+    private var title: String {
+        if !gift.item.trimmed.isEmpty { return gift.item }
+        return gift.occasion.isEmpty ? "礼物" : gift.occasion
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: gift.item.trimmed.isEmpty && gift.amount > 0 ? "yensign.circle" : "gift",
+                      color: Palette.gift, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text([Fmt.date(gift.date), gift.item.trimmed.isEmpty ? "" : gift.occasion]
+                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if gift.amount > 0 {
+                Text(Fmt.money(gift.amount))
+                    .font(Typo.display(17, weight: .medium))
+                    .monospacedDigit()
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// 几项评分，进页面时从零涨上去
+struct ScoreBarsView: View {
+    let entries: [ScoreEntry]
+
+    @State private var shown = false
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(entries) { item in
+                ScoreBar(title: item.label, value: .constant(shown ? item.value : 0), editable: false)
+            }
+        }
+        .onAppear {
+            withAnimation(.smooth(duration: 0.8).delay(0.15)) { shown = true }
+        }
     }
 }
 
@@ -719,20 +862,45 @@ struct NoteRow: View {
 
 struct NoteSheet: View {
     let title: String
+    var girl: Girl?
+    var prompt = "写点什么…"
     let onSave: (NoteItem) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var note = NoteItem()
     @FocusState private var focused: Bool
 
+    private func daysBack(_ n: Int) -> Date {
+        let today = Calendar.current.startOfDay(for: Date())
+        return Calendar.current.date(byAdding: .day, value: -n, to: today) ?? today
+    }
+
     var body: some View {
         ComposerShell(title: title, canSave: !note.text.trimmed.isEmpty,
                       onCancel: { dismiss() },
                       onSave: { onSave(note); dismiss() }) {
-            DatePicker("日期", selection: $note.date, displayedComponents: .date)
-                .labelsHidden()
-                .fixedSize()
-            TextField("写点什么…", text: $note.text, axis: .vertical)
+            if let girl {
+                HStack(spacing: 10) {
+                    AvatarView(photoID: girl.avatarID, name: girl.name, size: 30)
+                    Text("关于「\(girl.name)」")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+            }
+            HStack(spacing: 8) {
+                ForEach(0..<3, id: \.self) { back in
+                    let day = daysBack(back)
+                    ChoiceChip(title: ["今天", "昨天", "前天"][back],
+                               selected: Calendar.current.isDate(note.date, inSameDayAs: day)) {
+                        note.date = day
+                    }
+                }
+                Spacer(minLength: 0)
+                DatePicker("日期", selection: $note.date, displayedComponents: .date)
+                    .labelsHidden()
+            }
+            TextField(prompt, text: $note.text, axis: .vertical)
                 .font(Typo.display(20, weight: .regular))
                 .lineSpacing(5)
                 .lineLimit(6...20)
@@ -776,6 +944,14 @@ struct GiftSheet: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
+
+            ChipRow {
+                ForEach(["52", "66", "88", "131.4", "188", "520", "1314"], id: \.self) { v in
+                    ChoiceChip(title: "¥" + v, selected: amountText == v) {
+                        amountText = amountText == v ? "" : v
+                    }
+                }
+            }
 
             TextField("送了什么", text: $gift.item)
                 .composerField()
@@ -827,25 +1003,101 @@ struct ImportantDateSheet: View {
             Toggle(isOn: $item.remind) {
                 Label("每年提醒", systemImage: "bell")
             }
+            .tint(.accentColor)
             .composerField()
         }
         .composerSheet(detents: [.large])
     }
 }
 
+/// 亲密度：大号数字 + 细进度条，进页面时从零涨上去
+struct IntimacyMeter: View {
+    let value: Int
+    var tint: Color = .accentColor
+
+    @State private var shown = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("亲密度")
+                Spacer(minLength: 8)
+                Text("\(shown ? value : 0)")
+                    .font(Typo.display(22, weight: .semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                Text("/ 100")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.12))
+                    Capsule()
+                        .fill(LinearGradient(colors: [tint.opacity(0.55), tint], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(6, geo.size.width * CGFloat(shown ? value : 0) / 100))
+                }
+            }
+            .frame(height: 6)
+        }
+        .onAppear {
+            withAnimation(.smooth(duration: 0.9).delay(0.15)) { shown = true }
+        }
+    }
+}
+
+/// 关系变化：一条竖线串起每次变化，标出每个阶段持续了多久
 struct StatusHistoryView: View {
     let history: [StatusChange]
 
+    private var items: [StatusChange] { history.sorted { $0.date > $1.date } }
+
     var body: some View {
-        List(history.sorted { $0.date > $1.date }) { item in
-            HStack {
-                let status = RelationStatus(rawValue: item.status) ?? .flirting
-                Badge(text: status.title, color: status.color)
-                Spacer()
-                Text(Fmt.dateTime(item.date)).foregroundStyle(.secondary)
+        let list = items
+        List {
+            Section {
+                ForEach(Array(list.enumerated()), id: \.element.id) { index, item in
+                    let status = RelationStatus(rawValue: item.status) ?? .flirting
+                    // 这一段一直持续到下一次变化（列表是倒序，下一次在前一行）
+                    let until = index == 0 ? Date() : list[index - 1].date
+                    let days = max(Fmt.days(from: item.date, to: until), 0)
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(index == 0 ? Color.clear : Color.secondary.opacity(0.2))
+                                .frame(width: 2, height: 10)
+                            Circle()
+                                .fill(status.color)
+                                .frame(width: 12, height: 12)
+                                .overlay(Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 2))
+                            Rectangle()
+                                .fill(index == list.count - 1 ? Color.clear : Color.secondary.opacity(0.2))
+                                .frame(width: 2)
+                        }
+                        .frame(width: 14)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(status.title)
+                                .font(Typo.display(17))
+                                .foregroundStyle(status.color)
+                            Text(Fmt.dateTime(item.date))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                        Spacer(minLength: 8)
+                        Text(index == 0 ? "至今 \(days) 天" : "持续 \(days) 天")
+                            .font(.footnote)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 10)
+                    }
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    .listRowSeparator(.hidden)
+                }
             }
         }
         .navigationTitle("状态变化")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

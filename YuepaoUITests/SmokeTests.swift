@@ -55,6 +55,12 @@ final class SmokeTests: XCTestCase {
         name.tap()
         name.typeText("测试")
         shot(app, "a2-edit")
+        // 收起键盘看一眼整页，再点开「基本信息」里的 MBTI
+        app.swipeUp()
+        sleep(1)
+        let mbti = app.buttons["MBTI E"].firstMatch
+        if mbti.exists && mbti.isHittable { mbti.tap() }
+        shot(app, "a2b-edit-basic")
         app.buttons["saveGirl"].tap()
 
         let row = app.staticTexts["测试"].firstMatch
@@ -183,11 +189,12 @@ final class SmokeTests: XCTestCase {
             if scrollTo(toys, in: app) {
                 toys.tap()
                 sleep(1)
-                app.swipeUp()
-                sleep(1)
-                for name in ["跳蛋", "眼罩"] {
-                    let chip = app.buttons[name].firstMatch
-                    if chip.exists && chip.isHittable { chip.tap() }
+                // 点开后往上滚到能看到「眼罩」（束缚组），震动组的「跳蛋」也在同一屏
+                let blindfold = app.buttons["眼罩"].firstMatch
+                if scrollTo(blindfold, in: app, maxSwipes: 3) {
+                    blindfold.tap()
+                    let vibe = app.buttons["跳蛋"].firstMatch
+                    if vibe.exists && vibe.isHittable { vibe.tap() }
                 }
                 sleep(1)
                 shot(app, "e2d-record-toys")
@@ -416,11 +423,29 @@ final class SmokeTests: XCTestCase {
             if edit.waitForExistence(timeout: 3) {
                 edit.tap()
                 sleep(2)
-                let traits = app.buttons["tags-traits"].firstMatch
-                if scrollTo(traits, in: app, maxSwipes: 14) {
-                    traits.tap()
+                // 编辑页：顶部是头像、代号、关系、位分，其余卡片收起只显示摘要
+                shot(app, "c9-edit-top")
+                app.swipeUp()
+                sleep(1)
+                shot(app, "c10-edit-folded")
+                let harem = app.buttons["fold-harem"].firstMatch
+                if scrollTo(harem, in: app) {
+                    harem.tap()
                     sleep(1)
-                    shot(app, "c8-intimacy-edit")
+                    shot(app, "c11-edit-harem")
+                    harem.tap()
+                    sleep(1)
+                }
+                let intimacy = app.buttons["fold-intimacy"].firstMatch
+                if scrollTo(intimacy, in: app) {
+                    intimacy.tap()
+                    sleep(1)
+                    let traits = app.buttons["tags-traits"].firstMatch
+                    if scrollTo(traits, in: app) {
+                        traits.tap()
+                        sleep(1)
+                        shot(app, "c8-intimacy-edit")
+                    }
                 }
             }
         }
