@@ -50,6 +50,9 @@ enum Palette {
 
     /// 卡片上的细描边
     static let hairline = Color.primary.opacity(0.08)
+
+    /// UIKit 里用的主色（酒红），跟随深浅色
+    static let wineUI = UIColor(named: "AccentColor") ?? UIColor(red: 0.616, green: 0.204, blue: 0.302, alpha: 1)
 }
 
 /// 字体：标题和大数字用衬线（New York），正文用系统字体
@@ -177,6 +180,22 @@ struct Callout: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(.vertical, 4)
+    }
+}
+
+/// 浮在地图等内容上方的控件：iOS 26 用液态玻璃，低版本用毛玻璃 + 细描边 + 阴影
+extension View {
+    @ViewBuilder
+    func floatingGlass<S: Shape>(_ shape: S, interactive: Bool = false) -> some View {
+        if #available(iOS 26.0, *) {
+            let glass: Glass = interactive ? Glass.regular.interactive() : Glass.regular
+            self.glassEffect(glass, in: shape)
+        } else {
+            self
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.stroke(Palette.hairline, lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.12), radius: 10, y: 3)
+        }
     }
 }
 

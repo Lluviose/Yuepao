@@ -343,6 +343,78 @@ final class SmokeTests: XCTestCase {
         }
     }
 
+    func testMapModule() {
+        let app = makeApp(seed: true)
+        app.launch()
+        tapTab(app, "地图")
+        sleep(4)
+        shot(app, "k1-map")
+
+        // 足迹总览，点城市飞过去
+        let summary = app.buttons["mapSummary"].firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        summary.tap()
+        sleep(2)
+        shot(app, "k2-overview")
+        let city = app.buttons["city-上海"].firstMatch
+        if city.waitForExistence(timeout: 3) {
+            city.tap()
+        } else {
+            app.buttons["closeOverview"].firstMatch.tap()
+        }
+        sleep(3)
+        shot(app, "k3-city")
+
+        // 点一个人：底部卡片、连线，其余变淡
+        let pin = app.descendants(matching: .any)["pin-小美"].firstMatch
+        if pin.waitForExistence(timeout: 5) && pin.isHittable {
+            pin.tap()
+            sleep(2)
+            shot(app, "k4-focus")
+            let card = app.descendants(matching: .any)["mapCard-小美"].firstMatch
+            if card.waitForExistence(timeout: 3) {
+                card.swipeLeft()
+                sleep(2)
+                shot(app, "k5-next-card")
+            }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.3)).tap()
+            sleep(1)
+        }
+
+        // 地点和热力
+        app.buttons["mapMode-places"].firstMatch.tap()
+        sleep(2)
+        shot(app, "k6-places")
+        app.buttons["mapMode-heat"].firstMatch.tap()
+        sleep(3)
+        shot(app, "k7-heat")
+        app.buttons["mapMode-all"].firstMatch.tap()
+        sleep(1)
+
+        // 足迹回放
+        let playback = app.buttons["mapPlayback"].firstMatch
+        if playback.waitForExistence(timeout: 3) {
+            playback.tap()
+            sleep(5)
+            shot(app, "k8-playback")
+            sleep(9)
+            shot(app, "k9-playback-end")
+            app.buttons["playbackClose"].firstMatch.tap()
+            sleep(2)
+        }
+
+        // 长按空白处添加地点
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).press(forDuration: 1.0)
+        sleep(2)
+        shot(app, "k10-draft")
+        let create = app.buttons["draftCreate"].firstMatch
+        if create.waitForExistence(timeout: 3) {
+            create.tap()
+            sleep(2)
+            shot(app, "k11-new-place")
+        }
+    }
+
     func testDarkMode() {
         let app = makeApp(seed: true, dark: true)
         app.launch()
@@ -350,6 +422,16 @@ final class SmokeTests: XCTestCase {
             tapTab(app, tab)
             sleep(1)
             shot(app, "f\(index)-dark")
+        }
+        tapTab(app, "地图")
+        sleep(4)
+        shot(app, "f4-dark-map")
+        let heat = app.buttons["mapMode-heat"].firstMatch
+        if heat.waitForExistence(timeout: 3) {
+            heat.tap()
+            sleep(3)
+            shot(app, "f5-dark-heat")
+            app.buttons["mapMode-all"].firstMatch.tap()
         }
         tapTab(app, "后宫")
         let mei = app.staticTexts["小美"].firstMatch

@@ -1,231 +1,45 @@
 import SwiftUI
 import MapKit
 
-struct MapGirlItem {
-    let id: UUID
-    let name: String
-    let coordinate: CLLocationCoordinate2D
-    let color: UIColor
-    let avatarID: String?
-}
+/// SwiftUI 这边用来“遥控”地图：显示全部、定位、飞到某处、选中某个标记
+@MainActor
+final class MapController: ObservableObject {
+    fileprivate weak var coordinator: ClusterMapView.Coordinator?
 
-struct MapPlaceItem {
-    let id: UUID
-    let name: String
-    let coordinate: CLLocationCoordinate2D
-    let count: Int
-}
+    func fitAll(animated: Bool = true) {
+        coordinator?.fitAll(animated: animated)
+    }
 
-enum MapSelection: Identifiable {
-    case girl(UUID)
-    case place(UUID)
-    case group(girls: [UUID], places: [UUID])
+    func locateMe() {
+        coordinator?.locateMe()
+    }
 
-    var id: String {
-        switch self {
-        case .girl(let id): return "g-\(id)"
-        case .place(let id): return "p-\(id)"
-        case .group(let g, let p): return "grp-" + (g + p).map(\.uuidString).joined(separator: ",")
-        }
+    func fly(to coordinates: [CLLocationCoordinate2D]) {
+        coordinator?.fly(to: coordinates)
+    }
+
+    /// 让某个标记出现在可见区域中间并选中（滑动底部卡片时用）
+    func reveal(_ focus: MapFocus) {
+        coordinator?.reveal(focus)
     }
 }
-
-// MARK: - Annotations
-
-final class GirlAnnotation: NSObject, MKAnnotation {
-    let item: MapGirlItem
-    var coordinate: CLLocationCoordinate2D { item.coordinate }
-    var title: String? { item.name }
-
-    init(_ item: MapGirlItem) {
-        self.item = item
-    }
-}
-
-final class PlaceAnnotation: NSObject, MKAnnotation {
-    let item: MapPlaceItem
-    var coordinate: CLLocationCoordinate2D { item.coordinate }
-    var title: String? { item.name }
-
-    init(_ item: MapPlaceItem) {
-        self.item = item
-    }
-}
-
-// MARK: - Annotation views
-
-final class GirlAnnotationView: MKAnnotationView {
-    static let reuseID = "girl"
-
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        clusteringIdentifier = "girl"
-        collisionMode = .circle
-        displayPriority = .required
-        canShowCallout = false
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func prepareForDisplay() {
-        super.prepareForDisplay()
-        clusteringIdentifier = "girl"
-        guard let a = annotation as? GirlAnnotation else { return }
-        let avatar = a.item.avatarID.flatMap { PhotoStore.shared.thumbnail($0, size: 120) }
-        image = MarkerRenderer.avatar(image: avatar, name: a.item.name, border: a.item.color)
-        centerOffset = CGPoint(x: 0, y: 8)
-    }
-}
-
-final class PlaceAnnotationView: MKAnnotationView {
-    static let reuseID = "place"
-
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        clusteringIdentifier = "place"
-        collisionMode = .circle
-        displayPriority = .required
-        canShowCallout = false
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func prepareForDisplay() {
-        super.prepareForDisplay()
-        clusteringIdentifier = "place"
-        guard let a = annotation as? PlaceAnnotation else { return }
-        image = MarkerRenderer.countBadge(count: a.item.count, suffix: "")
-        // 往右上角偏一点，和同一位置的头像错开，像个角标
-        centerOffset = MarkerRenderer.placeOffset
-    }
-}
-
-final class CountClusterView: MKAnnotationView {
-    static let reuseID = "cluster"
-
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        collisionMode = .circle
-        displayPriority = .required
-        canShowCallout = false
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func prepareForDisplay() {
-        super.prepareForDisplay()
-        guard let cluster = annotation as? MKClusterAnnotation else { return }
-        let members = cluster.memberAnnotations
-        if members.first is GirlAnnotation {
-            image = MarkerRenderer.girlCluster(count: members.count)
-            centerOffset = .zero
-        } else {
-            let total = members.compactMap { ($0 as? PlaceAnnotation)?.item.count }.reduce(0, +)
-            image = MarkerRenderer.countBadge(count: total, suffix: "")
-            centerOffset = MarkerRenderer.placeOffset
-        }
-    }
-}
-
-enum MarkerRenderer {
-    static let placeOffset = CGPoint(x: 18, y: -18)
-
-    static func avatar(image: UIImage?, name: String, border: UIColor) -> UIImage {
-        let diameter: CGFloat = 44
-        let labelHeight: CGFloat = 16
-        let width: CGFloat = 72
-        let size = CGSize(width: width, height: diameter + labelHeight)
-        return UIGraphicsImageRenderer(size: size).image { _ in
-            let circle = CGRect(x: (width - diameter) / 2, y: 0, width: diameter, height: diameter)
-            let inner = circle.insetBy(dx: 3, dy: 3)
-
-            border.setFill()
-            UIBezierPath(ovalIn: circle).fill()
-
-            UIGraphicsGetCurrentContext()?.saveGState()
-            UIBezierPath(ovalIn: inner).addClip()
-            if let image {
-                let scale = max(inner.width / image.size.width, inner.height / image.size.height)
-                let w = image.size.width * scale, h = image.size.height * scale
-                image.draw(in: CGRect(x: inner.midX - w / 2, y: inner.midY - h / 2, width: w, height: h))
-            } else {
-                let (top, bottom) = Palette.avatarUIColors(for: name)
-                if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                             colors: [top.cgColor, bottom.cgColor] as CFArray,
-                                             locations: [0, 1]) {
-                    UIGraphicsGetCurrentContext()?.drawLinearGradient(
-                        gradient, start: CGPoint(x: inner.minX, y: inner.minY),
-                        end: CGPoint(x: inner.maxX, y: inner.maxY), options: [])
-                }
-                let initial = String(name.prefix(1)) as NSString
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 18, weight: .semibold),
-                    .foregroundColor: UIColor.white
-                ]
-                let s = initial.size(withAttributes: attrs)
-                initial.draw(at: CGPoint(x: inner.midX - s.width / 2, y: inner.midY - s.height / 2), withAttributes: attrs)
-            }
-            UIGraphicsGetCurrentContext()?.restoreGState()
-
-            let label = name as NSString
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.alignment = .center
-            paragraph.lineBreakMode = .byTruncatingTail
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 11, weight: .semibold),
-                .foregroundColor: UIColor.label,
-                .strokeColor: UIColor.systemBackground,
-                .strokeWidth: -3.0,
-                .paragraphStyle: paragraph
-            ]
-            label.draw(in: CGRect(x: 0, y: diameter + 1, width: width, height: labelHeight), withAttributes: attrs)
-        }
-    }
-
-    /// 地点：酒红色圆点，次数越多越大（颜色不再越来越红）
-    static func countBadge(count: Int, suffix: String) -> UIImage {
-        let diameter = 28 + min(CGFloat(count), 20) * 1.2
-        let color = UIColor(red: 0.55, green: 0.17, blue: 0.27, alpha: 0.94)
-        return circle(text: "\(count)\(suffix)", diameter: diameter, color: color)
-    }
-
-    /// 人的聚合：深灰
-    static func girlCluster(count: Int) -> UIImage {
-        circle(text: "\(count)人", diameter: 44, color: UIColor(white: 0.16, alpha: 0.92))
-    }
-
-    private static func circle(text: String, diameter: CGFloat, color: UIColor) -> UIImage {
-        let size = CGSize(width: diameter, height: diameter)
-        return UIGraphicsImageRenderer(size: size).image { _ in
-            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 1.5, dy: 1.5)
-            color.setFill()
-            let path = UIBezierPath(ovalIn: rect)
-            path.fill()
-            UIColor.white.withAlphaComponent(0.9).setStroke()
-            path.lineWidth = 2
-            path.stroke()
-
-            let baseFont = UIFont.systemFont(ofSize: max(12, diameter * 0.36), weight: .semibold)
-            let font = baseFont.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: baseFont.pointSize) } ?? baseFont
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: UIColor.white
-            ]
-            let s = (text as NSString).size(withAttributes: attrs)
-            (text as NSString).draw(at: CGPoint(x: (size.width - s.width) / 2, y: (size.height - s.height) / 2), withAttributes: attrs)
-        }
-    }
-}
-
-// MARK: - Map view
 
 struct ClusterMapView: UIViewRepresentable {
-    var girls: [MapGirlItem]
-    var places: [MapPlaceItem]
-    /// 每次加 1 就执行一次「显示全部」/「定位到我」
-    var fitRequest: Int = 0
-    var locateRequest: Int = 0
-    var onSelect: (MapSelection) -> Void
+    /// 底部卡片展开时占的高度，选中标记时按它留出空间
+    static let cardChrome: CGFloat = 168
+
+    var content: MapContent
+    var focus: MapFocus?
+    var draft: CLLocationCoordinate2D?
+    var style: MapStyle
+    /// 顶部和底部浮层占掉的高度（安全区以外的部分）
+    var chrome: UIEdgeInsets
+    let controller: MapController
+    var onFocus: (MapFocus) -> Void
+    var onCluster: ([MapFocus]) -> Void
+    var onTapEmpty: () -> Void
+    var onLongPress: (CLLocationCoordinate2D) -> Void
+    var onUserLocation: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -235,126 +49,523 @@ struct ClusterMapView: UIViewRepresentable {
         let map = MKMapView()
         map.delegate = context.coordinator
         map.showsUserLocation = true
-        map.showsCompass = true
-        map.register(GirlAnnotationView.self, forAnnotationViewWithReuseIdentifier: GirlAnnotationView.reuseID)
-        map.register(PlaceAnnotationView.self, forAnnotationViewWithReuseIdentifier: PlaceAnnotationView.reuseID)
-        map.register(CountClusterView.self, forAnnotationViewWithReuseIdentifier: CountClusterView.reuseID)
-        map.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 35, longitude: 105),
-                                         span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)), animated: false)
+        map.showsCompass = false
+        map.isRotateEnabled = false
+        map.isPitchEnabled = false
+        map.register(PersonPinView.self, forAnnotationViewWithReuseIdentifier: PersonPinView.reuseID)
+        map.register(SpotPinView.self, forAnnotationViewWithReuseIdentifier: SpotPinView.reuseID)
+        map.register(ClusterMarkerView.self, forAnnotationViewWithReuseIdentifier: ClusterMarkerView.reuseID)
+        map.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 33, longitude: 112),
+                                         span: MKCoordinateSpan(latitudeDelta: 26, longitudeDelta: 26)), animated: false)
+
+        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        longPress.minimumPressDuration = 0.45
+        longPress.delegate = context.coordinator
+        map.addGestureRecognizer(longPress)
+
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
+        map.addGestureRecognizer(tap)
+
+        context.coordinator.map = map
+        controller.coordinator = context.coordinator
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.sync(map)
-        context.coordinator.handleRequests(map)
+        controller.coordinator = context.coordinator
+        context.coordinator.update(map)
     }
 
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: ClusterMapView
-        private var signature = ""
-        private var didFit = false
-        private var lastFit = 0
-        private var lastLocate = 0
+        weak var map: MKMapView?
 
-        func handleRequests(_ map: MKMapView) {
-            if parent.fitRequest != lastFit {
-                lastFit = parent.fitRequest
-                let all = map.annotations.filter { !($0 is MKUserLocation) }
-                Coordinator.fit(map, to: all, animated: true)
-            }
-            if parent.locateRequest != lastLocate {
-                lastLocate = parent.locateRequest
-                if let location = map.userLocation.location {
-                    let region = MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 4000, longitudinalMeters: 4000)
-                    map.setRegion(map.regionThatFits(region), animated: true)
-                } else {
-                    LocationPermission.requestIfNeeded()
-                }
-            }
-        }
+        private var people: [UUID: PersonAnnotation] = [:]
+        private var spots: [UUID: SpotAnnotation] = [:]
+        private var draftAnnotation: DraftAnnotation?
+        private let markerViews = NSHashTable<MarkerView>.weakObjects()
+        private var heatOverlay: HeatOverlay?
+        private var heatSource: [HeatPoint] = []
+        private var arcs: [ArcPolyline] = []
+        private var appliedFocus: MapFocus?
+        private var appliedLinks = Set<MapLink>()
+        private var related = Set<UUID>()
+        private var appliedStyle: MapStyle?
+        private var appliedChrome: UIEdgeInsets?
+        private var didInitialFit = false
+        /// 数据刚变过：这段时间里新出现的标记做入场动画
+        private var animateUntil: CFTimeInterval = 0
+        private var lastUserCoordinate: CLLocationCoordinate2D?
+        private var pendingSelect: MKAnnotation?
+        /// 由卡片滑动触发的选中，didSelect 时不再回传给 SwiftUI
+        private var programmaticFocus: MapFocus?
 
         init(parent: ClusterMapView) {
             self.parent = parent
         }
 
-        func sync(_ map: MKMapView) {
-            let girlSig = parent.girls.map { "\($0.id)|\($0.coordinate.latitude)|\($0.coordinate.longitude)|\($0.color.hashValue)|\($0.avatarID ?? "")|\($0.name)" }
-            let placeSig = parent.places.map { "\($0.id)|\($0.coordinate.latitude)|\($0.coordinate.longitude)|\($0.count)" }
-            let sig = (girlSig + ["#"] + placeSig).joined(separator: ";")
-            guard sig != signature else { return }
-            signature = sig
+        // MARK: 同步
 
-            let old = map.annotations.filter { !($0 is MKUserLocation) }
-            map.removeAnnotations(old)
-            let new: [MKAnnotation] = parent.girls.map { GirlAnnotation($0) } + parent.places.map { PlaceAnnotation($0) }
-            map.addAnnotations(new)
+        func update(_ map: MKMapView) {
+            applyStyle(map)
+            applyChrome(map)
+            syncAnnotations(map)
+            syncHeat(map)
+            syncDraft(map)
+            applyFocus(map)
+        }
 
-            if !didFit, !new.isEmpty {
-                didFit = true
-                DispatchQueue.main.async {
-                    Coordinator.fit(map, to: new, animated: false)
+        private func applyStyle(_ map: MKMapView) {
+            guard parent.style != appliedStyle else { return }
+            appliedStyle = parent.style
+            map.preferredConfiguration = parent.style.makeConfiguration()
+        }
+
+        private func applyChrome(_ map: MKMapView) {
+            guard parent.chrome != appliedChrome else { return }
+            appliedChrome = parent.chrome
+            // 把地图自带的法律信息挪到浮层上方
+            map.layoutMargins = UIEdgeInsets(top: parent.chrome.top, left: 8, bottom: parent.chrome.bottom, right: 8)
+        }
+
+        private func syncAnnotations(_ map: MKMapView) {
+            var toRemove: [MKAnnotation] = []
+            var toAdd: [MKAnnotation] = []
+            var pulsed: [MKAnnotation] = []
+            var visualsChanged = false
+
+            let newPeople = Dictionary(parent.content.people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            for (id, annotation) in people where newPeople[id] == nil {
+                toRemove.append(annotation)
+                people[id] = nil
+            }
+            for item in parent.content.people {
+                if let existing = people[item.id] {
+                    guard existing.item != item else { continue }
+                    if existing.item.latitude != item.latitude || existing.item.longitude != item.longitude {
+                        toRemove.append(existing)
+                        let fresh = PersonAnnotation(item)
+                        people[item.id] = fresh
+                        toAdd.append(fresh)
+                    } else {
+                        existing.item = item
+                        (map.view(for: existing) as? MarkerView)?.configure()
+                        visualsChanged = true
+                    }
+                } else {
+                    let fresh = PersonAnnotation(item)
+                    people[item.id] = fresh
+                    toAdd.append(fresh)
+                }
+            }
+
+            let newSpots = Dictionary(parent.content.spots.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            for (id, annotation) in spots where newSpots[id] == nil {
+                toRemove.append(annotation)
+                spots[id] = nil
+            }
+            for item in parent.content.spots {
+                if let existing = spots[item.id] {
+                    guard existing.item != item else { continue }
+                    if existing.item.latitude != item.latitude || existing.item.longitude != item.longitude {
+                        toRemove.append(existing)
+                        let fresh = SpotAnnotation(item)
+                        spots[item.id] = fresh
+                        toAdd.append(fresh)
+                    } else {
+                        let grew = item.count > existing.item.count
+                        existing.item = item
+                        (map.view(for: existing) as? MarkerView)?.configure()
+                        if grew { pulsed.append(existing) }
+                        visualsChanged = true
+                    }
+                } else {
+                    let fresh = SpotAnnotation(item)
+                    spots[item.id] = fresh
+                    toAdd.append(fresh)
+                }
+            }
+
+            if !toRemove.isEmpty { map.removeAnnotations(toRemove) }
+            if !toAdd.isEmpty {
+                animateUntil = CACurrentMediaTime() + 0.8
+                map.addAnnotations(toAdd)
+            }
+            if visualsChanged { refreshClusters(pulse: pulsed) }
+            for a in pulsed {
+                (map.view(for: a) as? MarkerView)?.pulse()
+            }
+
+            if !didInitialFit, !toAdd.isEmpty || !parent.content.heat.isEmpty {
+                didInitialFit = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.fitAll(animated: false)
                 }
             }
         }
 
-        /// 让所有标注都可见，并避开顶部筛选栏和底部标签栏
-        static func fit(_ map: MKMapView, to annotations: [MKAnnotation], animated: Bool) {
-            guard let first = annotations.first else { return }
+        /// 聚合标记的图不会自己更新，成员数字变了要手动重画
+        private func refreshClusters(pulse: [MKAnnotation]) {
+            for view in markerViews.allObjects {
+                guard let cluster = view.annotation as? MKClusterAnnotation else { continue }
+                view.configure()
+                if pulse.contains(where: { p in cluster.memberAnnotations.contains { $0 === p } }) {
+                    view.pulse()
+                }
+            }
+        }
+
+        private func syncHeat(_ map: MKMapView) {
+            guard parent.content.heat != heatSource else { return }
+            heatSource = parent.content.heat
+            if heatSource.isEmpty {
+                if let old = heatOverlay { map.removeOverlay(old) }
+                heatOverlay = nil
+                return
+            }
+            if let overlay = heatOverlay {
+                // 原地更新，避免整层闪一下
+                overlay.update(heatSource)
+                map.renderer(for: overlay)?.setNeedsDisplay()
+            } else {
+                let overlay = HeatOverlay(points: heatSource)
+                heatOverlay = overlay
+                map.addOverlay(overlay, level: .aboveRoads)
+            }
+        }
+
+        private func syncDraft(_ map: MKMapView) {
+            let current = draftAnnotation?.coordinate
+            let wanted = parent.draft
+            let same: Bool
+            switch (current, wanted) {
+            case (nil, nil): same = true
+            case let (a?, b?): same = a.latitude == b.latitude && a.longitude == b.longitude
+            default: same = false
+            }
+            guard !same else { return }
+            if let old = draftAnnotation { map.removeAnnotation(old) }
+            draftAnnotation = nil
+            if let wanted {
+                let pin = DraftAnnotation(wanted)
+                draftAnnotation = pin
+                map.addAnnotation(pin)
+            }
+        }
+
+        // MARK: 选中后的弱化和连线
+
+        private func applyFocus(_ map: MKMapView) {
+            let links = Set(parent.content.links)
+            guard parent.focus != appliedFocus || links != appliedLinks else { return }
+            let focusChanged = parent.focus != appliedFocus
+            appliedFocus = parent.focus
+            appliedLinks = links
+
+            switch parent.focus {
+            case .girl(let id)?:
+                related = Set(links.filter { $0.girl == id }.map(\.place)).union([id])
+            case .place(let id)?:
+                related = Set(links.filter { $0.place == id }.map(\.girl)).union([id])
+            case nil:
+                related = []
+            }
+
+            UIView.animate(withDuration: focusChanged ? 0.3 : 0) {
+                for view in self.markerViews.allObjects {
+                    guard let annotation = view.annotation else { continue }
+                    view.alpha = self.isRelated(annotation) ? 1 : 0.3
+                }
+            }
+
+            if !arcs.isEmpty { map.removeOverlays(arcs) }
+            arcs = makeArcs()
+            if !arcs.isEmpty { map.addOverlays(arcs, level: .aboveRoads) }
+
+            if parent.focus == nil {
+                for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) }
+            }
+        }
+
+        private func isRelated(_ annotation: MKAnnotation) -> Bool {
+            guard appliedFocus != nil else { return true }
+            if let p = annotation as? PersonAnnotation { return related.contains(p.item.id) }
+            if let s = annotation as? SpotAnnotation { return related.contains(s.item.id) }
+            if let c = annotation as? MKClusterAnnotation { return c.memberAnnotations.contains { isRelated($0) } }
+            return true
+        }
+
+        private func makeArcs() -> [ArcPolyline] {
+            switch appliedFocus {
+            case .girl(let id)?:
+                guard let from = people[id]?.coordinate else { return [] }
+                return appliedLinks.filter { $0.girl == id }.compactMap { (link: MapLink) -> ArcPolyline? in
+                    guard let to = spots[link.place]?.coordinate, from.distance(to: to) > 60 else { return nil }
+                    return ArcBuilder.arc(from: from, to: to)
+                }
+            case .place(let id)?:
+                guard let to = spots[id]?.coordinate else { return [] }
+                return appliedLinks.filter { $0.place == id }.compactMap { (link: MapLink) -> ArcPolyline? in
+                    guard let from = people[link.girl]?.coordinate, from.distance(to: to) > 60 else { return nil }
+                    return ArcBuilder.arc(from: from, to: to)
+                }
+            case nil:
+                return []
+            }
+        }
+
+        // MARK: 相机
+
+        /// 浮层以外真正能看到地图的区域；`focusing` 时按底部卡片的高度算
+        private func visibleInsets(_ map: MKMapView, focusing: Bool = false) -> UIEdgeInsets {
+            let safe = map.safeAreaInsets
+            let bottom = focusing ? max(parent.chrome.bottom, ClusterMapView.cardChrome) : parent.chrome.bottom
+            return UIEdgeInsets(top: safe.top + parent.chrome.top, left: 0, bottom: safe.bottom + bottom, right: 0)
+        }
+
+        func fitAll(animated: Bool) {
+            guard let map else { return }
+            let coords = people.values.map(\.coordinate) + spots.values.map(\.coordinate)
+                + parent.content.heat.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            fit(map, to: coords, animated: animated)
+        }
+
+        func fly(to coordinates: [CLLocationCoordinate2D]) {
+            guard let map else { return }
+            fit(map, to: coordinates, animated: true)
+        }
+
+        private func fit(_ map: MKMapView, to coordinates: [CLLocationCoordinate2D], animated: Bool) {
+            guard let first = coordinates.first else { return }
             var rect = MKMapRect.null
-            for a in annotations {
-                let p = MKMapPoint(a.coordinate)
+            for c in coordinates {
+                let p = MKMapPoint(c)
                 rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 1, height: 1))
             }
-            let minSide = 3000 * MKMapPointsPerMeterAtLatitude(first.coordinate.latitude)
+            let minSide = 2600 * MKMapPointsPerMeterAtLatitude(first.latitude)
             if rect.size.width < minSide || rect.size.height < minSide {
                 rect = rect.insetBy(dx: -(max(minSide - rect.size.width, 0) / 2),
                                     dy: -(max(minSide - rect.size.height, 0) / 2))
             }
-            map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 60, left: 50, bottom: 150, right: 50), animated: animated)
+            let insets = visibleInsets(map)
+            // 头像标记在坐标上方，顶部多留一点
+            let padding = UIEdgeInsets(top: insets.top + 72, left: 48, bottom: insets.bottom + 28, right: 48)
+            map.setVisibleMapRect(rect, edgePadding: padding, animated: animated)
         }
 
-        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            if annotation is MKUserLocation { return nil }
-            if let cluster = annotation as? MKClusterAnnotation {
-                return mapView.dequeueReusableAnnotationView(withIdentifier: CountClusterView.reuseID, for: cluster)
+        func locateMe() {
+            guard let map else { return }
+            guard let location = map.userLocation.location else {
+                LocationPermission.requestIfNeeded()
+                return
             }
-            if annotation is GirlAnnotation {
-                return mapView.dequeueReusableAnnotationView(withIdentifier: GirlAnnotationView.reuseID, for: annotation)
+            let insets = visibleInsets(map)
+            let side = 3000 * MKMapPointsPerMeterAtLatitude(location.coordinate.latitude)
+            let p = MKMapPoint(location.coordinate)
+            map.setVisibleMapRect(MKMapRect(x: p.x - side / 2, y: p.y - side / 2, width: side, height: side),
+                                  edgePadding: UIEdgeInsets(top: insets.top + 20, left: 30, bottom: insets.bottom + 20, right: 30),
+                                  animated: true)
+        }
+
+        /// 把坐标移到可见区域正中，保持缩放
+        private func center(_ coordinate: CLLocationCoordinate2D, in map: MKMapView) {
+            let insets = visibleInsets(map, focusing: true)
+            let p = map.convert(coordinate, toPointTo: map)
+            let desired = CGPoint(x: map.bounds.midX,
+                                  y: insets.top + (map.bounds.height - insets.top - insets.bottom) / 2 + 20)
+            let target = CGPoint(x: map.bounds.midX + p.x - desired.x, y: map.bounds.midY + p.y - desired.y)
+            map.setCenter(map.convert(target, toCoordinateFrom: map), animated: true)
+        }
+
+        /// 点中的标记如果被底部卡片挡住，就挪上来
+        private func keepVisible(_ coordinate: CLLocationCoordinate2D, in map: MKMapView) {
+            let insets = visibleInsets(map, focusing: true)
+            let p = map.convert(coordinate, toPointTo: map)
+            let top = insets.top + 70
+            let bottom = map.bounds.height - insets.bottom - 24
+            guard p.y < top || p.y > bottom || p.x < 36 || p.x > map.bounds.width - 36 else { return }
+            center(coordinate, in: map)
+        }
+
+        func reveal(_ focus: MapFocus) {
+            guard let map, let annotation = annotation(for: focus) else { return }
+            programmaticFocus = focus
+            let coordinate = annotation.coordinate
+            let onScreen = map.visibleMapRect.contains(MKMapPoint(coordinate))
+            if map.view(for: annotation) == nil && onScreen {
+                // 藏在聚合里：拉近一些让它单独露出来
+                let meters = max(min(map.region.span.latitudeDelta * 111_000 * 0.3, 6000), 900)
+                let side = meters * MKMapPointsPerMeterAtLatitude(coordinate.latitude)
+                let p = MKMapPoint(coordinate)
+                let insets = visibleInsets(map, focusing: true)
+                map.setVisibleMapRect(MKMapRect(x: p.x - side / 2, y: p.y - side / 2, width: side, height: side),
+                                      edgePadding: UIEdgeInsets(top: insets.top + 40, left: 30, bottom: insets.bottom + 10, right: 30),
+                                      animated: true)
+                pendingSelect = annotation
+            } else {
+                center(coordinate, in: map)
+                select(annotation, in: map)
             }
-            if annotation is PlaceAnnotation {
-                return mapView.dequeueReusableAnnotationView(withIdentifier: PlaceAnnotationView.reuseID, for: annotation)
+        }
+
+        private func select(_ annotation: MKAnnotation, in map: MKMapView) {
+            if map.selectedAnnotations.contains(where: { $0 === annotation }) { return }
+            map.selectAnnotation(annotation, animated: true)
+        }
+
+        private func annotation(for focus: MapFocus) -> MKAnnotation? {
+            switch focus {
+            case .girl(let id): return people[id]
+            case .place(let id): return spots[id]
             }
+        }
+
+        private func focus(of annotation: MKAnnotation) -> MapFocus? {
+            if let p = annotation as? PersonAnnotation { return .girl(p.item.id) }
+            if let s = annotation as? SpotAnnotation { return .place(s.item.id) }
             return nil
+        }
+
+        // MARK: MKMapViewDelegate
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            let view: MKAnnotationView
+            switch annotation {
+            case is MKUserLocation:
+                return nil
+            case let cluster as MKClusterAnnotation:
+                view = mapView.dequeueReusableAnnotationView(withIdentifier: ClusterMarkerView.reuseID, for: cluster)
+            case is PersonAnnotation:
+                view = mapView.dequeueReusableAnnotationView(withIdentifier: PersonPinView.reuseID, for: annotation)
+            case is SpotAnnotation:
+                view = mapView.dequeueReusableAnnotationView(withIdentifier: SpotPinView.reuseID, for: annotation)
+            case is DraftAnnotation:
+                let marker = mapView.dequeueReusableAnnotationView(withIdentifier: "draft") as? MKMarkerAnnotationView
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: "draft")
+                marker.annotation = annotation
+                marker.markerTintColor = Palette.wineUI
+                marker.glyphImage = UIImage(systemName: "plus")
+                marker.displayPriority = .required
+                marker.animatesWhenAdded = true
+                marker.canShowCallout = false
+                return marker
+            default:
+                return nil
+            }
+            if let marker = view as? MarkerView {
+                markerViews.add(marker)
+                marker.alpha = isRelated(annotation) ? 1 : 0.3
+            }
+            return view
+        }
+
+        func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
+            guard CACurrentMediaTime() < animateUntil else { return }
+            for (index, view) in views.enumerated() where view is MarkerView {
+                let target = view.alpha
+                view.alpha = 0
+                view.transform = CGAffineTransform(scaleX: 0.3, y: 0.3)
+                UIView.animate(withDuration: 0.55, delay: min(Double(index) * 0.03, 0.3),
+                               usingSpringWithDamping: 0.62, initialSpringVelocity: 0.6,
+                               options: [.allowUserInteraction]) {
+                    view.alpha = target
+                    view.transform = .identity
+                }
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let heat = overlay as? HeatOverlay { return HeatRenderer(heat: heat) }
+            if let arc = overlay as? ArcPolyline { return ArcBuilder.renderer(for: arc) }
+            return MKOverlayRenderer(overlay: overlay)
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
             guard let annotation = view.annotation else { return }
-            mapView.deselectAnnotation(annotation, animated: false)
-
+            if annotation is MKUserLocation || annotation is DraftAnnotation {
+                mapView.deselectAnnotation(annotation, animated: false)
+                return
+            }
             if let cluster = annotation as? MKClusterAnnotation {
+                mapView.deselectAnnotation(cluster, animated: false)
                 let members = cluster.memberAnnotations
-                if spread(of: members) < 30 {
-                    // 都在同一个点上，放大也分不开，直接列出来
-                    let girls = members.compactMap { ($0 as? GirlAnnotation)?.item.id }
-                    let places = members.compactMap { ($0 as? PlaceAnnotation)?.item.id }
-                    parent.onSelect(.group(girls: girls, places: places))
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if spread(of: members) > 40 && mapView.region.span.latitudeDelta > 0.004 {
+                    fit(mapView, to: members.map { $0.coordinate }, animated: true)
                 } else {
-                    Coordinator.fit(mapView, to: members, animated: true)
+                    // 同一个位置放大也分不开：直接在底部卡片里一个个看
+                    let focuses = members.compactMap { focus(of: $0) }
+                    guard !focuses.isEmpty else { return }
+                    DispatchQueue.main.async { self.parent.onCluster(focuses) }
                 }
                 return
             }
-            if let g = annotation as? GirlAnnotation {
-                parent.onSelect(.girl(g.item.id))
-            } else if let p = annotation as? PlaceAnnotation {
-                parent.onSelect(.place(p.item.id))
+            guard let tapped = focus(of: annotation) else { return }
+            // 是 SwiftUI 那边让选中的，不再回传
+            if tapped == appliedFocus || tapped == programmaticFocus {
+                programmaticFocus = nil
+                return
             }
+            programmaticFocus = nil
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            keepVisible(annotation.coordinate, in: mapView)
+            DispatchQueue.main.async { self.parent.onFocus(tapped) }
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            guard let pending = pendingSelect else { return }
+            pendingSelect = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak mapView] in
+                guard let self, let mapView, mapView.view(for: pending) != nil else { return }
+                self.select(pending, in: mapView)
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard let coordinate = userLocation.location?.coordinate else { return }
+            if let last = lastUserCoordinate, last.distance(to: coordinate) < 150 { return }
+            lastUserCoordinate = coordinate
+            DispatchQueue.main.async { self.parent.onUserLocation(coordinate) }
         }
 
         /// 成员之间的最大距离（米）
         private func spread(of members: [MKAnnotation]) -> CLLocationDistance {
             guard let first = members.first else { return 0 }
             return members.map { $0.coordinate.distance(to: first.coordinate) }.max() ?? 0
+        }
+
+        // MARK: 手势
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let map else { return }
+            let point = gesture.location(in: map)
+            guard !hitsAnnotation(at: point, in: map) else { return }
+            parent.onTapEmpty()
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let map else { return }
+            let point = gesture.location(in: map)
+            guard !hitsAnnotation(at: point, in: map) else { return }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            parent.onLongPress(map.convert(point, toCoordinateFrom: map))
+        }
+
+        private func hitsAnnotation(at point: CGPoint, in map: MKMapView) -> Bool {
+            var view = map.hitTest(point, with: nil)
+            while let v = view {
+                if v is MKAnnotationView { return true }
+                view = v.superview
+            }
+            return false
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
         }
     }
 }

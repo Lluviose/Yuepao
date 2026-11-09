@@ -21,16 +21,17 @@ struct PlaceEditView: View {
     @State private var note: String
     @State private var rating: Int
 
-    init(place: Place?, onSave: ((Place) -> Void)? = nil) {
+    /// `preset`：从地图上长按选的位置，新建时预先填好
+    init(place: Place?, preset: PickedLocation? = nil, onSave: ((Place) -> Void)? = nil) {
         self.place = place
         self.onSave = onSave
-        _name = State(initialValue: place?.name ?? "")
+        _name = State(initialValue: place?.name ?? preset?.name ?? "")
         _type = State(initialValue: place?.type ?? .hotel)
-        _latitude = State(initialValue: place?.latitude)
-        _longitude = State(initialValue: place?.longitude)
-        _city = State(initialValue: place?.city ?? "")
-        _district = State(initialValue: place?.district ?? "")
-        _address = State(initialValue: place?.address ?? "")
+        _latitude = State(initialValue: place?.latitude ?? preset?.coordinate.latitude)
+        _longitude = State(initialValue: place?.longitude ?? preset?.coordinate.longitude)
+        _city = State(initialValue: place?.city ?? preset?.city ?? "")
+        _district = State(initialValue: place?.district ?? preset?.district ?? "")
+        _address = State(initialValue: place?.address ?? preset?.address ?? "")
         _note = State(initialValue: place?.note ?? "")
         _rating = State(initialValue: place?.rating ?? 0)
     }
