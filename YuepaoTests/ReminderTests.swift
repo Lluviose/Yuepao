@@ -18,7 +18,7 @@ final class ReminderTests: XCTestCase {
             let encounter = Encounter(date: Date())
             encounter.protection = .none
             let scheduler = MemoryScheduler()
-            func rebuild() {
+            @MainActor func rebuild() {
                 Reminders.rescheduleAll(girls: [girl], encounters: [encounter], todos: [todo],
                                        weeklyRemaining: 2, scheduler: scheduler)
             }
@@ -46,7 +46,7 @@ final class ReminderTests: XCTestCase {
     }
 
     func testRebuildingCancelsOldDataAndDisabledRiskReminders() throws {
-        try withPreferences {
+        withPreferences {
             let todo = TodoItem(title: "旧待办")
             todo.hasTime = true
             todo.dueDate = Date().addingTimeInterval(86400)
@@ -66,7 +66,7 @@ final class ReminderTests: XCTestCase {
     }
 
     func testDisablingNotificationsRemovesAllPendingAndDeliveredContent() throws {
-        try withPreferences {
+        withPreferences {
             let todo = TodoItem(title: "待办")
             todo.hasTime = true
             todo.dueDate = Date().addingTimeInterval(86400)
@@ -81,7 +81,7 @@ final class ReminderTests: XCTestCase {
         }
     }
 
-    private func withPreferences(_ operation: () throws -> Void) rethrows {
+    private func withPreferences(_ operation: @MainActor () throws -> Void) rethrows {
         let defaults = UserDefaults.standard
         let previous = keys.map { defaults.object(forKey: $0) }
         defer {
