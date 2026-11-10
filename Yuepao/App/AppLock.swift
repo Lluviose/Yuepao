@@ -188,6 +188,7 @@ final class PrivacyShield {
     private var window: UIWindow?
     private weak var previousKeyWindow: UIWindow?
     private var presentationGeneration = 0
+    private var isShowing = false
 
     func update(locked: Bool, covered: Bool) {
         state.locked = locked
@@ -199,42 +200,50 @@ final class PrivacyShield {
     }
 
     private func show() {
-        // 只让当前输入结束，再由遮罩接管焦点，避免底层 SwiftUI 焦点重新拉起键盘。
-        hideKeyboard()
-        if let window {
-            window.makeKeyAndVisible()
-            return
-        }
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return }
-        // 淡出期间再次显示时，保留最初的内容窗口，不能把旧遮罩记成恢复目标。
-        if previousKeyWindow == nil {
-            previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
-                ?? scene.windows.first { $0.windowLevel == .normal && $0.rootViewController != nil }
-        }
-        let window = UIWindow(windowScene: scene)
-        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
-        window.overrideUserInterfaceStyle = Self.interfaceStyle
-        let host = UIHostingController(rootView: ShieldView(state: state))
-        host.view.backgroundColor = .clear
-        // 遮住时辅助功能也只访问这个窗口，不能读到下面的敏感内容。
-        host.view.accessibilityViewIsModal = true
-        window.rootViewController = host
+        // 同一次遮罩呈现只接管一次焦点，避免反复触发输入器的恢复流程。
+        if isShowing, let window, !window.isHidden, window.isKeyWindow { return }
         presentationGeneration += 1
-        self.window = window
-        window.makeKeyAndVisible()
+        isShowing = true
+        hideKeyboard()
+
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = window?.windowScene
+            ?? scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return }
+        if previousKeyWindow == nil {
+            previousKeyWindow = scene.windows.first { $0 !== window && $0.isKeyWindow }
+                ?? scene.windows.first { $0 !== window && $0.windowLevel == .normal && $0.rootViewController != nil }
+        }
+        let shield: UIWindow
+        if let window {
+            shield = window
+        } else {
+            shield = UIWindow(windowScene: scene)
+            shield.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
+            let host = UIHostingController(rootView: ShieldView(state: state))
+            host.view.backgroundColor = .clear
+            host.view.accessibilityViewIsModal = true
+            shield.rootViewController = host
+            window = shield
+        }
+        // 复用同一个 hosting controller，避免每次锁屏都重建额外的 SwiftUI 根环境。
+        shield.layer.removeAllAnimations()
+        shield.alpha = 1
+        shield.overrideUserInterfaceStyle = Self.interfaceStyle
+        shield.makeKeyAndVisible()
     }
 
-    /// 淡出后收起。淡出途中又要显示时会新建一个窗口，不受影响
     private func hide() {
-        guard let window else { return }
-        self.window = nil
+        guard isShowing, let window else { return }
+        isShowing = false
+        presentationGeneration += 1
         let generation = presentationGeneration
         UIView.animate(withDuration: 0.2, animations: {
             window.alpha = 0
         }, completion: { [weak self] _ in
+            // 同一窗口会被复用，任何旧回调都必须先校验，不能隐藏新一轮锁屏。
+            guard let self, !self.isShowing, self.presentationGeneration == generation else { return }
             window.isHidden = true
-            guard let self, self.window == nil, self.presentationGeneration == generation else { return }
+            window.alpha = 1
             self.previousKeyWindow?.makeKey()
             self.previousKeyWindow = nil
         })
