@@ -204,20 +204,27 @@ struct EmptyState: View {
     var actionTitle: String?
     var action: (() -> Void)?
 
+    /// 出现时外圈先铺开、图标弹一下，文字跟着浮上来
+    @State private var shown = false
+
     var body: some View {
         VStack(spacing: 18) {
             ZStack {
                 Circle()
                     .fill(Color.accentColor.opacity(0.06))
                     .frame(width: 116, height: 116)
+                    .scaleEffect(shown ? 1 : 0.7)
                 Circle()
                     .fill(Color.accentColor.opacity(0.09))
                     .frame(width: 82, height: 82)
+                    .scaleEffect(shown ? 1 : 0.8)
                 Image(systemName: symbol)
                     .font(.system(size: 30, weight: .light))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.accentColor)
+                    .scaleEffect(shown ? 1 : 0.6)
             }
+            .opacity(shown ? 1 : 0)
             .accessibilityHidden(true)
             VStack(spacing: 6) {
                 Text(title)
@@ -238,6 +245,9 @@ struct EmptyState: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
+        .onAppear {
+            withAnimation(.spring(duration: 0.6, bounce: 0.32)) { shown = true }
+        }
     }
 }
 

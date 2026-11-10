@@ -14,6 +14,8 @@ struct GirlListView: View {
     @State private var creating = false
     @State private var pendingDelete: Girl?
     @State private var loggingFor: Girl?
+    /// 刚建好的档案：弹窗收起后直接进去，接着记一次或补资料
+    @State private var created: Girl?
     @Namespace private var zoom
 
     private var sort: GirlSort { GirlSort(rawValue: sortRaw) ?? .recent }
@@ -113,7 +115,13 @@ struct GirlListView: View {
                 }
             }
             .sheet(isPresented: $creating) {
-                GirlEditView(girl: nil)
+                GirlEditView(girl: nil, onCreate: { girl in
+                    // 等弹窗收起再进档案页
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { created = girl }
+                })
+            }
+            .navigationDestination(item: $created) { girl in
+                GirlDetailView(girl: girl)
             }
             .sheet(item: $loggingFor) { girl in
                 EncounterEditView(encounter: nil, presetGirls: [girl])

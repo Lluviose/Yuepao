@@ -79,6 +79,9 @@ struct GirlDetailView: View {
                     .id(toast)
             }
         }
+        .onChange(of: girl.encounters.count) { old, new in
+            if new > old { showToast("记下了，和她的第 \(new) 次") }
+        }
         .navigationTitle(girl.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -118,6 +121,7 @@ struct GirlDetailView: View {
                 withAnimation(.snappy) {
                     girl.update { $0.memos.append(note); $0.memos.sort { $0.date > $1.date } }
                 }
+                showToast("备忘加到时间线了")
             }
         case .said:
             NoteSheet(title: "她说过的事", girl: girl, prompt: "她提到的家人、经历、计划、喜好…") { note in
@@ -125,6 +129,7 @@ struct GirlDetailView: View {
                     girl.update { $0.saidNotes.append(note); $0.saidNotes.sort { $0.date > $1.date } }
                 }
                 AchievementCenter.shared.refresh(context: context)
+                showToast("记下她说的话了")
             }
         case .gift:
             GiftSheet { gift in
@@ -132,6 +137,7 @@ struct GirlDetailView: View {
                     girl.update { $0.gifts.append(gift); $0.gifts.sort { $0.date > $1.date } }
                 }
                 AchievementCenter.shared.refresh(context: context)
+                showToast("礼物记下了")
             }
         case .date:
             ImportantDateSheet { item in
@@ -139,12 +145,14 @@ struct GirlDetailView: View {
                     girl.update { $0.importantDates.append(item) }
                 }
                 Reminders.rescheduleDates(girls: allGirls)
+                showToast("加进重要日期了")
             }
         case .period:
             PeriodEditSheet(entry: PeriodEntry(start: Calendar.current.startOfDay(for: Date()))) { entry in
                 withAnimation(.snappy) {
                     girl.update { d in d.setPeriods(d.periodEntries + [entry]) }
                 }
+                showToast("经期补记好了")
             }
         case .todo:
             TodoEditView(todo: nil, presetGirl: girl)
@@ -211,7 +219,7 @@ struct GirlDetailView: View {
                         .font(Typo.display(30))
                     HStack(spacing: 6) {
                         if !girl.rank.isEmpty { Badge(text: girl.rank, color: Palette.gold) }
-                        Badge(text: girl.status.title, color: girl.status.color)
+                        statusMenu
                     }
                     let line = headerLine(d)
                     if !line.isEmpty {
@@ -248,6 +256,42 @@ struct GirlDetailView: View {
             .padding(.vertical, 12)
             .listRowBackground(heroBackground)
         }
+    }
+
+    /// 关系状态直接点开改，不用进编辑页
+    private var statusMenu: some View {
+        Menu {
+            Picker("关系", selection: Binding(get: { girl.status }, set: { changeStatus($0) })) {
+                ForEach(RelationStatus.allCases) { s in
+                    Text(s.title).tag(s)
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Badge(text: girl.status.title, color: girl.status.color)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Color.secondary.opacity(0.7))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .tint(Color.primary)
+        .accessibilityLabel("关系：\(girl.status.title)，点按修改")
+        .accessibilityIdentifier("statusMenu")
+    }
+
+    /// 记进状态变化里，时间线上也会多一条
+    private func changeStatus(_ status: RelationStatus) {
+        guard status != girl.status else { return }
+        withAnimation(.snappy) {
+            girl.status = status
+            girl.update { $0.statusHistory.append(StatusChange(date: Date(), status: status.rawValue)) }
+        }
+        try? context.save()
+        AchievementCenter.shared.refresh(context: context)
+        Haptics.light()
+        showToast("关系改成了「\(status.title)」")
     }
 
     /// 有头像时用模糊后的照片做底，没有时用她的头像色调

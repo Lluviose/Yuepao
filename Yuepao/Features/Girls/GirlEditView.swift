@@ -69,10 +69,13 @@ struct GirlEditView: View {
     private let initialDraft: GirlDraft
     /// 打开后直接跳到哪一块（从档案页某个小节点「编辑」进来时）
     private let focus: String?
+    /// 新建的档案存好以后告诉外面一声（列表会直接进到这份新档案里）
+    private let onCreate: ((Girl) -> Void)?
 
-    init(girl: Girl?, focus: String? = nil) {
+    init(girl: Girl?, focus: String? = nil, onCreate: ((Girl) -> Void)? = nil) {
         self.girl = girl
         self.focus = focus
+        self.onCreate = onCreate
         let d = GirlDraft(girl)
         _draft = State(initialValue: d)
         initialDraft = d
@@ -865,6 +868,7 @@ struct GirlEditView: View {
         Haptics.success()
         AchievementCenter.shared.refresh(context: context)
         Reminders.rescheduleDates(girls: isNew ? allGirls + [target] : allGirls)
+        if isNew { onCreate?(target) }
         dismiss()
     }
 }

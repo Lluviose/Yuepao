@@ -22,7 +22,8 @@ final class SmokeTests: XCTestCase {
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {
-        let screenshot = app.screenshot()
+        // 直接截屏幕：不用先向 App 要一遍界面结构，视频在播的时候那一步容易超时
+        let screenshot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
@@ -63,13 +64,15 @@ final class SmokeTests: XCTestCase {
         shot(app, "a2b-edit-basic")
         app.buttons["saveGirl"].tap()
 
-        let row = app.staticTexts["测试"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        shot(app, "a3-list")
-        row.tap()
-
+        // 存好以后会自己进到新档案里；万一没进去，就点一下列表里的那一行
         let log = app.buttons["logEncounter"].firstMatch
+        if !log.waitForExistence(timeout: 5) {
+            let row = app.staticTexts["测试"].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            row.tap()
+        }
         XCTAssertTrue(log.waitForExistence(timeout: 5))
+        sleep(1)
         shot(app, "a4-detail")
         log.tap()
 
@@ -496,34 +499,6 @@ final class SmokeTests: XCTestCase {
         app.launch()
         // 演示用的实况和视频在后台生成，等一下
         sleep(5)
-        tapTab(app, "记录")
-        let filter = app.buttons["filter-阿雪"].firstMatch
-        if filter.waitForExistence(timeout: 3) { filter.tap() }
-        let record = app.staticTexts["阿雪"].firstMatch
-        XCTAssertTrue(record.waitForExistence(timeout: 5))
-        record.tap()
-        sleep(2)
-        let first = app.buttons["media-0"].firstMatch
-        if scrollTo(first, in: app, maxSwipes: 3) {
-            sleep(1)
-            shot(app, "m1-record-media")
-            first.tap()
-            sleep(2)
-            shot(app, "m2-viewer-photo")
-            app.swipeLeft()
-            sleep(2)
-            shot(app, "m3-viewer-live")
-            app.swipeLeft()
-            sleep(3)
-            shot(app, "m4-viewer-video")
-            let close = app.buttons["closeViewer"].firstMatch
-            if close.waitForExistence(timeout: 3) && close.isHittable {
-                close.tap()
-                sleep(1)
-            }
-        }
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        sleep(1)
 
         // 相册：全部照片视频按月份排
         tapTab(app, "成就")
@@ -553,6 +528,30 @@ final class SmokeTests: XCTestCase {
                     shot(app, "m7-girl-album")
                 }
             }
+        }
+
+        // 记录里的照片墙和全屏查看放在最后：视频一播起来，查找控件容易超时，
+        // 所以截完视频那张就结束，后面不再找任何东西
+        tapTab(app, "记录")
+        let filter = app.buttons["filter-阿雪"].firstMatch
+        if filter.waitForExistence(timeout: 3) { filter.tap() }
+        let record = app.staticTexts["阿雪"].firstMatch
+        XCTAssertTrue(record.waitForExistence(timeout: 5))
+        record.tap()
+        sleep(2)
+        let first = app.buttons["media-0"].firstMatch
+        if scrollTo(first, in: app, maxSwipes: 3) {
+            sleep(1)
+            shot(app, "m1-record-media")
+            first.tap()
+            sleep(2)
+            shot(app, "m2-viewer-photo")
+            app.swipeLeft()
+            sleep(2)
+            shot(app, "m3-viewer-live")
+            app.swipeLeft()
+            sleep(3)
+            shot(app, "m4-viewer-video")
         }
     }
 
