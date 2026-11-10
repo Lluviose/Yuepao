@@ -186,6 +186,8 @@ final class PrivacyShield {
 
     private let state = ShieldState()
     private var window: UIWindow?
+    private weak var previousKeyWindow: UIWindow?
+    private var presentationGeneration = 0
 
     func update(locked: Bool, covered: Bool) {
         state.locked = locked
@@ -197,18 +199,19 @@ final class PrivacyShield {
     }
 
     private func show() {
-        // 系统键盘可能高于 alert 窗口，先结束底层输入，避免预测栏露出私密文字。
-        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
-            for candidate in scene.windows where candidate !== window {
-                candidate.endEditing(true)
-            }
-        }
+        // 只让当前输入结束，再由遮罩接管焦点，避免底层 SwiftUI 焦点重新拉起键盘。
+        hideKeyboard()
         if let window {
-            window.isHidden = false
+            window.makeKeyAndVisible()
             return
         }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return }
+        // 淡出期间再次显示时，保留最初的内容窗口，不能把旧遮罩记成恢复目标。
+        if previousKeyWindow == nil {
+            previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
+                ?? scene.windows.first { $0.windowLevel == .normal && $0.rootViewController != nil }
+        }
         let window = UIWindow(windowScene: scene)
         window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
         window.overrideUserInterfaceStyle = Self.interfaceStyle
@@ -217,18 +220,23 @@ final class PrivacyShield {
         // 遮住时辅助功能也只访问这个窗口，不能读到下面的敏感内容。
         host.view.accessibilityViewIsModal = true
         window.rootViewController = host
-        window.isHidden = false
+        presentationGeneration += 1
         self.window = window
+        window.makeKeyAndVisible()
     }
 
     /// 淡出后收起。淡出途中又要显示时会新建一个窗口，不受影响
     private func hide() {
         guard let window else { return }
         self.window = nil
+        let generation = presentationGeneration
         UIView.animate(withDuration: 0.2, animations: {
             window.alpha = 0
-        }, completion: { _ in
+        }, completion: { [weak self] _ in
             window.isHidden = true
+            guard let self, self.window == nil, self.presentationGeneration == generation else { return }
+            self.previousKeyWindow?.makeKey()
+            self.previousKeyWindow = nil
         })
     }
 
