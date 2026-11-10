@@ -34,6 +34,8 @@ struct EncounterEditView: View {
     @State private var sessionMedia: Set<String> = []
     /// 已经照着哪一条记录填过了（填过就不再提示）
     @State private var reusedFrom: UUID?
+    /// 从分区索引跳到的那张卡片，描边亮一下
+    @State private var flashing: String?
 
     private let originalPhotos: Set<String>
     private let initialSnapshot: Snapshot
@@ -146,17 +148,17 @@ struct EncounterEditView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 14) {
-                        whoCard.id("who")
-                        placeCard.id("place")
-                        timeCard.id("time")
-                        processCard.id("process")
-                        playCard.id("play")
-                        safetyCard.id("safety")
-                        feelingCard.id("feeling")
-                        dateCard.id("date")
-                        costCard.id("cost")
-                        noteCard.id("note")
-                        photoCard.id("photo")
+                        whoCard.overlay(flashBorder("who")).id("who")
+                        placeCard.overlay(flashBorder("place")).id("place")
+                        timeCard.overlay(flashBorder("time")).id("time")
+                        processCard.overlay(flashBorder("process")).id("process")
+                        playCard.overlay(flashBorder("play")).id("play")
+                        safetyCard.overlay(flashBorder("safety")).id("safety")
+                        feelingCard.overlay(flashBorder("feeling")).id("feeling")
+                        dateCard.overlay(flashBorder("date")).id("date")
+                        costCard.overlay(flashBorder("cost")).id("cost")
+                        noteCard.overlay(flashBorder("note")).id("note")
+                        photoCard.overlay(flashBorder("photo")).id("photo")
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -240,6 +242,19 @@ struct EncounterEditView: View {
         withAnimation(.snappy(duration: 0.35)) {
             proxy.scrollTo(id, anchor: .top)
         }
+        withAnimation(.easeOut(duration: 0.25)) { flashing = id }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.easeOut(duration: 0.6)) {
+                if flashing == id { flashing = nil }
+            }
+        }
+    }
+
+    /// 跳过去的那张卡片描边亮一下，告诉你落在哪
+    private func flashBorder(_ id: String) -> some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(Color.accentColor.opacity(flashing == id ? 0.55 : 0), lineWidth: 1.5)
+            .allowsHitTesting(false)
     }
 
     private var riskMessage: String {

@@ -16,6 +16,8 @@ struct FoldCard<Content: View>: View {
     let content: () -> Content
 
     @State private var expanded: Bool
+    /// 从分区索引跳过来时，描边亮一下
+    @State private var flash = false
 
     init(_ title: String, symbol: String, summary: String, tint: Color = .accentColor,
          expanded: Bool = false, identifier: String? = nil, reveal: Int = 0,
@@ -73,8 +75,15 @@ struct FoldCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .fill(Palette.surface))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(tint.opacity(flash ? 0.55 : 0), lineWidth: 1.5)
+            .allowsHitTesting(false))
         .onChange(of: reveal) { _, _ in
             withAnimation(.snappy(duration: 0.34)) { expanded = true }
+            withAnimation(.easeOut(duration: 0.25)) { flash = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                withAnimation(.easeOut(duration: 0.6)) { flash = false }
+            }
         }
     }
 }

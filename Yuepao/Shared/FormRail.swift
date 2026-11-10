@@ -14,19 +14,24 @@ struct FormRail: View {
     let items: [FormRailItem]
     let onSelect: (String) -> Void
 
+    @State private var taps = 0
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 // 用标题当身份：表单里的卡片也用分区 id 做 .id()，两边同名的话 scrollTo 会认错
                 ForEach(items, id: \.title) { item in
                     Button {
+                        taps += 1
                         onSelect(item.id)
                     } label: {
                         HStack(spacing: 5) {
+                            // 填上的那一刻，小点从空心圈长成实心
                             Circle()
                                 .fill(item.filled ? Color.accentColor : Color.clear)
                                 .overlay(Circle().strokeBorder(Color.secondary.opacity(item.filled ? 0 : 0.5), lineWidth: 1))
                                 .frame(width: 6, height: 6)
+                                .scaleEffect(item.filled ? 1.15 : 0.9)
                             Text(item.title)
                         }
                         .font(.footnote.weight(.medium))
@@ -54,6 +59,7 @@ struct FormRail: View {
                 .fill(Palette.hairline)
                 .frame(height: 0.5)
         }
+        .sensoryFeedback(.selection, trigger: taps)
     }
 }
 
