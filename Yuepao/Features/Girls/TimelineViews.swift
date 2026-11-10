@@ -160,8 +160,15 @@ struct GirlTimelineView: View {
     let girl: Girl
 
     @Query private var todos: [TodoItem]
+    @Environment(\.modelContext) private var context
     @State private var filter: TimelineEvent.Kind?
-    @State private var addingMemo = false
+    @State private var adding: AddSheet?
+
+    /// 在时间线上能直接加的几种事
+    enum AddSheet: String, Identifiable {
+        case encounter, memo, said, gift
+        var id: String { rawValue }
+    }
 
     var body: some View {
         let all = TimelineBuilder.events(for: girl, todos: todos)
@@ -219,17 +226,46 @@ struct GirlTimelineView: View {
         .navigationTitle("时间线")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            Button {
-                addingMemo = true
+            Menu {
+                Button { adding = .encounter } label: { Label("记一次", systemImage: "heart") }
+                Button { adding = .memo } label: { Label("备忘", systemImage: "square.and.pencil") }
+                Button { adding = .said } label: { Label("她说过的事", systemImage: "quote.bubble") }
+                Button { adding = .gift } label: { Label("礼物 / 红包", systemImage: "gift") }
             } label: {
-                Image(systemName: "square.and.pencil")
+                Image(systemName: "plus")
             }
+            .accessibilityLabel("往时间线上加一条")
+            .accessibilityIdentifier("timelineAdd")
         }
-        .sheet(isPresented: $addingMemo) {
+        .sheet(item: $adding) { which in
+            addSheet(which)
+        }
+    }
+
+    @ViewBuilder
+    private func addSheet(_ which: AddSheet) -> some View {
+        switch which {
+        case .encounter:
+            EncounterEditView(encounter: nil, presetGirls: [girl])
+        case .memo:
             NoteSheet(title: "加一条备忘", girl: girl, prompt: "发生了什么、想记住的细节…") { note in
                 withAnimation(.snappy) {
                     girl.update { $0.memos.append(note); $0.memos.sort { $0.date > $1.date } }
                 }
+            }
+        case .said:
+            NoteSheet(title: "她说过的事", girl: girl, prompt: "她提到的家人、经历、计划、喜好…") { note in
+                withAnimation(.snappy) {
+                    girl.update { $0.saidNotes.append(note); $0.saidNotes.sort { $0.date > $1.date } }
+                }
+                AchievementCenter.shared.refresh(context: context)
+            }
+        case .gift:
+            GiftSheet { gift in
+                withAnimation(.snappy) {
+                    girl.update { $0.gifts.append(gift); $0.gifts.sort { $0.date > $1.date } }
+                }
+                AchievementCenter.shared.refresh(context: context)
             }
         }
     }

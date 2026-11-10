@@ -33,6 +33,7 @@ struct EncounterDetailView: View {
                 dateCard(d)
                 costCard(d)
                 noteCard(d)
+                actionBar
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -178,6 +179,30 @@ struct EncounterDetailView: View {
             }
             LinearGradient(colors: [.clear, card.opacity(0.92)], startPoint: .center, endPoint: .bottom)
         }
+    }
+
+    // MARK: 底部操作
+
+    /// 看完这条记录最常做的两件事放在页面最下面，不用去右上角的菜单里找
+    private var actionBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                repeating = true
+            } label: {
+                Label("再记一次", systemImage: "arrow.clockwise.heart")
+            }
+            .buttonStyle(.wine(fill: true))
+            .accessibilityIdentifier("repeatRecord")
+            Button {
+                editFocus = nil
+                editing = true
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+            .buttonStyle(.quiet(fill: true))
+            .accessibilityIdentifier("editRecord")
+        }
+        .padding(.top, 8)
     }
 
     // MARK: 补记
