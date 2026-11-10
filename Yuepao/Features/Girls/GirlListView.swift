@@ -1,0 +1,311 @@
+import SwiftUI
+import SwiftData
+
+struct GirlListView: View {
+    @Query(sort: \Girl.createdAt, order: .reverse, animation: .snappy) private var girls: [Girl]
+    @Environment(\.modelContext) private var context
+    @ObservedObject private var config = ConfigStore.shared
+
+    @AppStorage("girlSort") private var sortRaw = GirlSort.recent.rawValue
+    @AppStorage("girlHideEnded") private var hideEnded = false
+    @State private var search = ""
+    @State private var statusFilter: RelationStatus?
+    @State private var rankFilter: String?
+    @State private var creating = false
+    @State private var pendingDelete: Girl?
+    @State private var loggingFor: Girl?
+    /// 刚建好的档案：弹窗收起后直接进去，接着记一次或补资料
+    @State private var created: Girl?
+    @Namespace private var zoom
+
+    private var sort: GirlSort { GirlSort(rawValue: sortRaw) ?? .recent }
+
+    private var filtered: [Girl] {
+        var list = girls
+        if hideEnded { list = list.filter { $0.status.isCurrent } }
+        if let statusFilter { list = list.filter { $0.status == statusFilter } }
+        if let rankFilter { list = list.filter { $0.rank == rankFilter } }
+        let q = search.trimmed
+        if !q.isEmpty {
+            list = list.filter { g in
+                g.name.contains(q) || g.city.contains(q) || g.rank.contains(q) || g.details.realName.contains(q)
+                    || g.details.tags.contains { $0.contains(q) } || g.details.occupation.contains(q)
+            }
+        }
+        switch sort {
+        case .recent:
+            return list.sorted { ($0.lastInteraction() ?? $0.createdAt) > ($1.lastInteraction() ?? $1.createdAt) }
+        case .rank:
+            return list.sorted {
+                let a = config.rankIndex($0.rank), b = config.rankIndex($1.rank)
+                return a != b ? a < b : $0.encounters.count > $1.encounters.count
+            }
+        case .count:
+            return list.sorted { $0.encounters.count > $1.encounters.count }
+        case .rating:
+            return list.sorted { $0.details.ratingOverall > $1.details.ratingOverall }
+        case .created:
+            return list.sorted { $0.createdAt > $1.createdAt }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !girls.isEmpty {
+                    Section {
+                        summary
+                    }
+                }
+                Section {
+                    ForEach(filtered) { girl in
+                        NavigationLink {
+                            GirlDetailView(girl: girl)
+                                .zoomDestination(id: girl.id, in: zoom)
+                        } label: {
+                            GirlRow(girl: girl)
+                                .zoomSource(id: girl.id, in: zoom)
+                        }
+                        .swipeActions {
+                            Button("删除", role: .destructive) { pendingDelete = girl }
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                loggingFor = girl
+                            } label: {
+                                Label("记一次", systemImage: "heart.fill")
+                            }
+                            .tint(.accentColor)
+                            Button {
+                                withAnimation(.snappy) { girl.update { $0.lastContactDate = Date() } }
+                                Haptics.light()
+                            } label: {
+                                Label("联系过", systemImage: "message.fill")
+                            }
+                            .tint(Palette.todo)
+                        }
+                    }
+                }
+            }
+            .paperBackground()
+            .listSectionSpacing(.compact)
+            .overlay {
+                if girls.isEmpty {
+                    EmptyState(symbol: "person.crop.circle.badge.plus", title: "还没有档案",
+                               message: "建一份档案，把她的样子、喜好和你们的故事记下来",
+                               actionTitle: "新建档案", action: { creating = true })
+                } else if filtered.isEmpty {
+                    ContentUnavailableView.search
+                }
+            }
+            .searchable(text: $search, prompt: "代号、城市、标签…")
+            .navigationTitle("后宫")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    filterMenu
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        creating = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("新建档案")
+                    .accessibilityIdentifier("addGirl")
+                }
+            }
+            .sheet(isPresented: $creating) {
+                GirlEditView(girl: nil, onCreate: { girl in
+                    // 等弹窗收起再进档案页
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { created = girl }
+                })
+            }
+            .navigationDestination(item: $created) { girl in
+                GirlDetailView(girl: girl)
+            }
+            .sheet(item: $loggingFor) { girl in
+                EncounterEditView(encounter: nil, presetGirls: [girl])
+            }
+            .confirmationDialog(
+                "删除「\(pendingDelete?.name ?? "")」的档案？",
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("删除档案，保留约会记录", role: .destructive) {
+                    if let g = pendingDelete { GirlActions.delete(g, alsoEncounters: false, context: context) }
+                    pendingDelete = nil
+                }
+                Button("删除档案和只和她有关的记录", role: .destructive) {
+                    if let g = pendingDelete { GirlActions.delete(g, alsoEncounters: true, context: context) }
+                    pendingDelete = nil
+                }
+            } message: {
+                Text("删除后无法恢复（除非有备份）")
+            }
+        }
+    }
+
+    private var summary: some View {
+        let harem = girls.filter { $0.status.inHarem }.count
+        let flirting = girls.filter { $0.status == .flirting }.count
+        return HStack(spacing: 0) {
+            SummaryCell(value: "\(harem)", label: "后宫", tint: RelationStatus.steady.color)
+            SummaryDivider()
+            SummaryCell(value: "\(flirting)", label: "暧昧中", tint: RelationStatus.flirting.color)
+            SummaryDivider()
+            SummaryCell(value: "\(girls.count)", label: "全部档案", tint: Color.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Picker("排序", selection: $sortRaw) {
+                ForEach(GirlSort.allCases) { s in
+                    Text(s.title).tag(s.rawValue)
+                }
+            }
+            Divider()
+            Picker("状态", selection: $statusFilter) {
+                Text("全部状态").tag(RelationStatus?.none)
+                ForEach(RelationStatus.allCases) { s in
+                    Text(s.title).tag(RelationStatus?.some(s))
+                }
+            }
+            Picker("位分", selection: $rankFilter) {
+                Text("全部位分").tag(String?.none)
+                ForEach(config.options(.ranks), id: \.self) { r in
+                    Text(r).tag(String?.some(r))
+                }
+            }
+            Toggle("隐藏已断联 / 拉黑", isOn: $hideEnded)
+        } label: {
+            Image(systemName: statusFilter == nil && rankFilter == nil && !hideEnded
+                  ? "line.3.horizontal.decrease.circle"
+                  : "line.3.horizontal.decrease.circle.fill")
+        }
+    }
+}
+
+/// 列表顶上的一格统计：大号衬线数字，下面是带小色点的说明
+struct SummaryCell: View {
+    let value: String
+    let label: String
+    var tint: Color?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(Typo.display(28, weight: .medium))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            HStack(spacing: 5) {
+                if let tint {
+                    Circle().fill(tint).frame(width: 5, height: 5)
+                }
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// 统计格之间的短竖线
+struct SummaryDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Palette.hairline)
+            .frame(width: 0.5, height: 34)
+    }
+}
+
+struct GirlRow: View {
+    let girl: Girl
+
+    var body: some View {
+        let d = girl.details
+        HStack(spacing: 12) {
+            AvatarView(photoID: girl.avatarID, name: girl.name, size: 50, ring: girl.status.color)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(girl.name).font(Typo.display(17))
+                    if !girl.rank.isEmpty { Badge(text: girl.rank) }
+                    Badge(text: girl.status.title, color: girl.status.color)
+                    ForEach(indicators(d), id: \.symbol) { item in
+                        Image(systemName: item.symbol)
+                            .font(.caption2)
+                            .foregroundStyle(item.color)
+                            .accessibilityLabel(item.label)
+                    }
+                }
+                Text(subtitle(d))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(girl.encounters.count)")
+                    .font(.title3.weight(.semibold))
+                    .statNumber()
+                Text("次").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// 名字旁边的小图标：生日临近、经期中、被冷落
+    private func indicators(_ d: GirlDetails) -> [(symbol: String, color: Color, label: String)] {
+        var items: [(symbol: String, color: Color, label: String)] = []
+        if let bd = d.birthday, Reminders.daysUntilNext(bd) <= 7 {
+            items.append(("gift.fill", Palette.date, "生日临近"))
+        }
+        if girl.status.isCurrent {
+            let cycle = d.cycle
+            if cycle.isOngoing {
+                items.append(("drop.fill", Palette.period, "经期中"))
+            }
+            if d.contactGoalDays > 0 {
+                let last = girl.lastInteraction(details: d) ?? girl.createdAt
+                if Fmt.days(from: last) > d.contactGoalDays {
+                    items.append(("snowflake", RelationStatus.cooling.color, "被冷落"))
+                }
+            }
+        }
+        return items
+    }
+
+    private func subtitle(_ d: GirlDetails) -> String {
+        var parts: [String] = []
+        if let age = Fmt.age(d.birthday) { parts.append("\(age)岁") }
+        if !girl.city.isEmpty { parts.append(girl.city) }
+        if let last = girl.lastInteraction(details: d) {
+            parts.append("上次 \(Fmt.daysAgo(last))")
+        } else {
+            parts.append("还没见过")
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
+@MainActor
+enum GirlActions {
+    static func delete(_ girl: Girl, alsoEncounters: Bool, context: ModelContext) {
+        let d = girl.details
+        var photos = d.photoIDs
+        if let avatar = girl.avatarID { photos.append(avatar) }
+        if alsoEncounters {
+            for e in girl.encounters where e.girls.count <= 1 {
+                photos.append(contentsOf: e.details.photoIDs)
+                Reminders.cancelRisk(encounterID: e.id)
+                context.delete(e)
+            }
+        }
+        MediaStore.shared.delete(photos)
+        context.delete(girl)
+        try? context.save()
+    }
+}

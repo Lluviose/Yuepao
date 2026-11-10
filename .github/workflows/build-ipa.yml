@@ -1,0 +1,162 @@
+name: Build IPA
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      commit_screenshots:
+        description: '把模拟器截图提交到 docs/screenshots'
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Xcode version
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Yuepao.xcodeproj \
+            -scheme Yuepao \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            -quiet \
+            build 2>&1 | tee build.log
+
+      - name: Show compile errors
+        if: failure()
+        run: grep -E "error:" build.log | sort -u | head -100 || true
+
+      - name: Package IPA
+        run: |
+          APP="build/Build/Products/Release-iphoneos/Yuepao.app"
+          test -d "$APP"
+          mkdir -p dist/Payload
+          cp -R "$APP" dist/Payload/
+          cd dist
+          zip -qry Yuepao.ipa Payload
+          ls -lh Yuepao.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: Yuepao-${{ github.run_number }}-ipa
+          path: dist/Yuepao.ipa
+          retention-days: 30
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Yuepao.ipa
+
+  ui-test:
+    # 在模拟器里跑一遍冒烟测试并截图，确认 App 能正常启动和使用
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          found = [(rt, d) for rt, ds in devices.items() if "iOS" in rt for d in ds if d["name"].startswith("iPhone")]
+          found.sort(key=lambda t: (t[0], "Pro" in t[1]["name"]))
+          print(found[-1][1]["udid"])
+          print(found[-1][0], found[-1][1]["name"], file=sys.stderr)
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit and UI tests
+        run: |
+          set -o pipefail
+          mkdir -p screenshots
+          TEST_RUNNER_SCREENSHOT_DIR="$PWD/screenshots" xcodebuild test \
+            -project Yuepao.xcodeproj \
+            -scheme Yuepao \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build-sim \
+            -resultBundlePath TestResults.xcresult \
+            -quiet 2>&1 | tee test.log
+
+      - name: Test summary
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json 2>/dev/null \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({k: d.get(k) for k in ("result","passedTests","failedTests","testFailures")}, ensure_ascii=False, indent=1))' || true
+
+      - name: Commit screenshots
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.commit_screenshots
+        run: |
+          mkdir -p docs/screenshots
+          rm -f docs/screenshots/*.jpg
+          for f in screenshots/*.png; do
+            [ -e "$f" ] || continue
+            n=$(basename "$f" .png)
+            sips -Z 900 -s format jpeg -s formatOptions 70 "$f" --out "docs/screenshots/$n.jpg" >/dev/null
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Update UI screenshots" || exit 0
+          git push
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: screenshots/
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            test.log
+            TestResults.xcresult
+          retention-days: 14
