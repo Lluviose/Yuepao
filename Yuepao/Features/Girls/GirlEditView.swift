@@ -65,6 +65,10 @@ struct GirlEditView: View {
     /// 别的档案里各个城市填过的常驻区域，打开时整理一次，用来给输入提示
     @State private var knownDistricts: [String: [String]] = [:]
     @FocusState private var nameFocused: Bool
+    #if DEBUG
+    @State private var editorIdentity = UUID()
+    @State private var nameWrite = ""
+    #endif
     private let originalAvatar: String?
     private let initialDraft: GirlDraft
     /// 打开后直接跳到哪一块（从档案页某个小节点「编辑」进来时）
@@ -85,6 +89,12 @@ struct GirlEditView: View {
     private var isNew: Bool { girl == nil }
 
     private var isDirty: Bool { draft != initialDraft || !newPhotoIDs.isEmpty }
+
+    #if DEBUG
+    private static var diagnosesEditor: Bool {
+        TestSupport.isUITesting && ProcessInfo.processInfo.arguments.contains("-diagnoseEditor")
+    }
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -156,6 +166,24 @@ struct GirlEditView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { nameFocused = true }
             }
         }
+        #if DEBUG
+        .onChange(of: draft.name) { old, value in
+            guard Self.diagnosesEditor else { return }
+            let write = "\(old.count)->\(value.count) locked=\(AppLock.shared.isLocked)"
+            let history = nameWrite.split(separator: ";").map(String.init) + [write]
+            nameWrite = history.suffix(12).joined(separator: ";")
+        }
+        .overlay(alignment: .topLeading) {
+            if Self.diagnosesEditor {
+                Text("id=\(editorIdentity.uuidString) length=\(draft.name.count) writes=\(nameWrite)")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(4)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("editorDiagnostic")
+            }
+        }
+        #endif
         .interactiveDismissDisabled(isDirty)
         .confirmationDialog("放弃这次的修改？", isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("放弃修改", role: .destructive) { discard() }

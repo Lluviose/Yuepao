@@ -117,9 +117,8 @@ jobs:
             -project Yuepao.xcodeproj \
             -scheme Yuepao \
             -destination "id=${{ steps.sim.outputs.udid }}" \
-            -only-testing:YuepaoUITests/SmokeTests/testLockScreen \
+            -parallel-testing-enabled NO \
             -only-testing:YuepaoUITests/SmokeTests/testPrivacyLockCoversEditorSheet \
-            -only-testing:YuepaoUITests/SmokeTests/testPrivacyLockCoversFullScreenMedia \
             -derivedDataPath build-sim \
             -resultBundlePath TestResults.xcresult \
             -quiet 2>&1 | tee test.log

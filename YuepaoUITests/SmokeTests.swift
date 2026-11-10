@@ -708,7 +708,7 @@ final class SmokeTests: XCTestCase {
     /// 退后台再回来时，真正呈现中的 sheet 要被锁住；解锁后仍保留未保存的输入。
     func testPrivacyLockCoversEditorSheet() {
         let app = makeApp(seed: false)
-        app.launchArguments.append("-testBackgroundLock")
+        app.launchArguments.append(contentsOf: ["-testBackgroundLock", "-diagnoseEditor"])
         app.launch()
 
         let add = app.buttons["addGirl"].firstMatch
@@ -727,6 +727,9 @@ final class SmokeTests: XCTestCase {
         XCTAssertEqual(name.value as? String, codeName)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.isHittable)
+        let diagnostic = app.staticTexts["editorDiagnostic"].firstMatch
+        XCTAssertTrue(diagnostic.waitForExistence(timeout: 5))
+        let beforeDiagnostic = diagnostic.label
         shot(app, "privacy-editor-before")
 
         backgroundAndCheckPrivacyLock(app, covering: save, screenshot: "privacy-editor-locked")
@@ -735,7 +738,7 @@ final class SmokeTests: XCTestCase {
         shot(app, "privacy-editor-after")
         let draftReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in save.isEnabled }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [draftReady], timeout: 5), .completed,
-                       "解锁后未保存的草稿必须仍可保存")
+                       "解锁后未保存的草稿必须仍可保存\nbefore: \(beforeDiagnostic)\nafter: \(diagnostic.label)")
         XCTAssertTrue(save.isHittable)
         save.tap()
         XCTAssertTrue(save.waitForNonExistence(timeout: 5))
