@@ -717,15 +717,29 @@ final class SmokeTests: XCTestCase {
         let name = app.textFields["girlName"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
-        name.typeText("未保存的私密内容")
+        let codeName = "PrivacyDraft42"
+        // 先提交输入法的候选内容，再重新聚焦，确保测到的是已写入草稿的文字。
+        name.typeText(codeName + "\n")
         let save = app.buttons["saveGirl"].firstMatch
+        XCTAssertTrue(save.isEnabled)
         XCTAssertTrue(save.isHittable)
+        name.tap()
+        XCTAssertEqual(name.value as? String, codeName)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.isHittable)
+        shot(app, "privacy-editor-before")
 
         backgroundAndCheckPrivacyLock(app, covering: save)
 
         XCTAssertTrue(save.waitForExistence(timeout: 5))
+        shot(app, "privacy-editor-after")
+        XCTAssertTrue(save.isEnabled, "解锁后未保存的草稿必须仍可保存")
         XCTAssertTrue(save.isHittable)
-        XCTAssertEqual(name.value as? String, "未保存的私密内容")
+        save.tap()
+        XCTAssertTrue(save.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["logEncounter"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[codeName].firstMatch.waitForExistence(timeout: 5),
+                      "保存后档案详情必须显示退后台前输入的代号")
     }
 
     /// fullScreenCover 同样要被顶层锁屏覆盖，解锁后继续看原来的媒体。
