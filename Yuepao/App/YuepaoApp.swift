@@ -37,11 +37,6 @@ struct YuepaoApp: App {
 }
 
 struct RootView: View {
-    @ObservedObject private var lock = AppLock.shared
-    @ObservedObject private var achievements = AchievementCenter.shared
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.modelContext) private var context
-    @Query private var girls: [Girl]
     @AppStorage("appearance") private var appearance = AppearanceMode.system.rawValue
     @State private var persistenceError = Persistence.loadError
 
@@ -56,46 +51,66 @@ struct RootView: View {
             } else {
                 MainTabView()
             }
+            CelebrationLayer()
+                .zIndex(1.5)
+        }
+        .background { SecurityLifecycle() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("persistenceUnavailable"))) { _ in
+            persistenceError = Persistence.loadError
+        }
+        .preferredColorScheme(AppearanceMode(rawValue: appearance)?.colorScheme)
+    }
+}
+
+/// 成就和锁的变化只刷新这一层，不重算承载编辑弹窗的主内容。
+private struct CelebrationLayer: View {
+    @ObservedObject private var lock = AppLock.shared
+    @ObservedObject private var achievements = AchievementCenter.shared
+
+    var body: some View {
+        ZStack {
             if let current = achievements.celebrating.first, !lock.isLocked {
                 CelebrationView(result: current) {
                     achievements.dismissCelebration()
                 }
                 .id(current.id)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(1.5)
-            }
-            if lock.isLocked {
-                LockScreen()
-                    .transition(.opacity.combined(with: .scale(scale: 1.04)))
-                    .zIndex(2)
-            } else if scenePhase != .active {
-                PrivacyCover()
-                    .zIndex(1)
             }
         }
+    }
+}
+
+/// 将安全生命周期放在稳定的独立子视图中；隐私遮罩只由顶层 UIWindow 呈现。
+private struct SecurityLifecycle: View {
+    @ObservedObject private var lock = AppLock.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var context
+    @Query private var girls: [Girl]
+
+    var body: some View {
+        Color.clear
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
         .onChange(of: scenePhase) { _, phase in
             lock.handle(phase)
             updateShield(phase)
             if phase == .active, Persistence.loadError == nil {
                 Reminders.rescheduleDates(girls: girls)
-                achievements.refresh(context: context)
+                AchievementCenter.shared.refresh(context: context)
             }
         }
         .onChange(of: lock.isLocked) { _, _ in
             updateShield(scenePhase)
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("persistenceUnavailable"))) { _ in
-            persistenceError = Persistence.loadError
-        }
         .onAppear {
+            // 同步先盖住首屏（包括 previewLock），再启动认证和其他刷新。
+            updateShield(scenePhase)
             if scenePhase == .active { lock.handle(.active) }
             updateShield(scenePhase)
-            if Persistence.loadError == nil { achievements.refresh(context: context) }
+            if Persistence.loadError == nil { AchievementCenter.shared.refresh(context: context) }
         }
-        .preferredColorScheme(AppearanceMode(rawValue: appearance)?.colorScheme)
     }
 
-    /// 弹窗和全屏查看器会盖在这一层上面，所以锁屏和遮罩另外放在最上层的窗口里
     private func updateShield(_ phase: ScenePhase) {
         PrivacyShield.shared.update(locked: lock.isLocked, covered: phase != .active)
     }

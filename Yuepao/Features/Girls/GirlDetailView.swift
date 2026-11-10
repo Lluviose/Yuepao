@@ -11,8 +11,6 @@ struct GirlDetailView: View {
     @ObservedObject private var config = ConfigStore.shared
 
     @State private var sheet: DetailSheet?
-    /// 从某个小节点「编辑」时，编辑页直接跳到对应的那一块
-    @State private var editFocus: String?
     @State private var showSensitive = false
     @State private var confirmDelete = false
     @State private var editingTodo: TodoItem?
@@ -20,9 +18,29 @@ struct GirlDetailView: View {
     /// 点了「联系过」之后顶部短暂出现的提示
     @State private var toast: String?
 
-    enum DetailSheet: String, Identifiable {
-        case edit, encounter, memo, said, gift, date, period, todo
-        var id: String { rawValue }
+    enum DetailSheet: Identifiable {
+        case edit(GirlEditSession)
+        case encounter, memo, said, gift, date, period, todo
+
+        var id: String {
+            switch self {
+            case .edit(let session): return "edit-\(session.id.uuidString)"
+            case .encounter: return "encounter"
+            case .memo: return "memo"
+            case .said: return "said"
+            case .gift: return "gift"
+            case .date: return "date"
+            case .period: return "period"
+            case .todo: return "todo"
+            }
+        }
+    }
+
+    private var sheetBinding: Binding<DetailSheet?> {
+        Binding(get: { sheet }, set: { value in
+            if value == nil, case let .edit(session)? = sheet { session.discard() }
+            sheet = value
+        })
     }
 
     private var herTodos: [TodoItem] {
@@ -32,8 +50,6 @@ struct GirlDetailView: View {
 
     var body: some View {
         let d = girl.details
-        // 让页面跟着 editFocus 刷新，弹出编辑页时拿到的才是刚设的值
-        let _ = editFocus
         List {
             Group {
                 header(d)
@@ -97,7 +113,7 @@ struct GirlDetailView: View {
                 .accessibilityIdentifier("girlMenu")
             }
         }
-        .sheet(item: $sheet) { which in
+        .sheet(item: sheetBinding) { which in
             sheetContent(which)
         }
         .sheet(item: $editingTodo) { todo in
@@ -112,8 +128,8 @@ struct GirlDetailView: View {
     @ViewBuilder
     private func sheetContent(_ which: DetailSheet) -> some View {
         switch which {
-        case .edit:
-            GirlEditView(girl: girl, focus: editFocus)
+        case .edit(let session):
+            GirlEditView(session: session)
         case .encounter:
             EncounterEditView(encounter: nil, presetGirls: [girl])
         case .memo:
@@ -161,8 +177,7 @@ struct GirlDetailView: View {
 
     /// 打开编辑页；带上小节名就直接跳到那一块
     private func edit(_ focus: String? = nil) {
-        editFocus = focus
-        sheet = .edit
+        sheet = .edit(GirlEditSession(girl: girl, focus: focus))
     }
 
     /// 小节标题右边的小笔：点了直接改这一块，不用进编辑页再找

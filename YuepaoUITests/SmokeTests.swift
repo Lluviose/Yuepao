@@ -729,17 +729,57 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.isHittable)
         shot(app, "privacy-editor-before")
 
-        backgroundAndCheckPrivacyLock(app, covering: save)
+        backgroundAndCheckPrivacyLock(app, covering: save, screenshot: "privacy-editor-locked")
 
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         shot(app, "privacy-editor-after")
-        XCTAssertTrue(save.isEnabled, "解锁后未保存的草稿必须仍可保存")
+        let draftReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in save.isEnabled }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [draftReady], timeout: 5), .completed,
+                       "解锁后未保存的草稿必须仍可保存")
         XCTAssertTrue(save.isHittable)
         save.tap()
         XCTAssertTrue(save.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["logEncounter"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts[codeName].firstMatch.waitForExistence(timeout: 5),
                       "保存后档案详情必须显示退后台前输入的代号")
+    }
+
+    /// 使用共用 ComposerShell 的表单也必须保留全部未保存字段。
+    func testPrivacyLockPreservesTodoDraft() {
+        let app = makeApp(seed: false)
+        app.launchArguments.append("-testBackgroundLock")
+        app.launch()
+        tapTab(app, "日程")
+        let agendaAdd = app.descendants(matching: .any)["agendaAdd"].firstMatch
+        XCTAssertTrue(agendaAdd.waitForExistence(timeout: 5))
+        agendaAdd.tap()
+        let addTodo = app.buttons["加待办"].firstMatch
+        XCTAssertTrue(addTodo.waitForExistence(timeout: 5))
+        addTodo.tap()
+
+        let title = app.textFields["todoTitle"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        title.typeText("TodoDraft42")
+        let note = app.textFields["备注"].firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 5))
+        note.tap()
+        note.typeText("KeepDraftNote")
+        title.tap()
+        let save = app.buttons["saveTodo"].firstMatch
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        shot(app, "privacy-todo-before")
+
+        backgroundAndCheckPrivacyLock(app, covering: save, screenshot: "privacy-todo-locked")
+
+        shot(app, "privacy-todo-after")
+        let draftReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in save.isEnabled }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [draftReady], timeout: 5), .completed)
+        save.tap()
+        XCTAssertTrue(save.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["TodoDraft42"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["KeepDraftNote"].firstMatch.waitForExistence(timeout: 5))
     }
 
     /// fullScreenCover 同样要被顶层锁屏覆盖，解锁后继续看原来的媒体。
@@ -759,7 +799,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         XCTAssertTrue(close.isHittable)
 
-        backgroundAndCheckPrivacyLock(app, covering: close)
+        backgroundAndCheckPrivacyLock(app, covering: close, screenshot: "privacy-media-locked")
 
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         XCTAssertTrue(close.isHittable)
@@ -767,7 +807,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(photo.waitForExistence(timeout: 5))
     }
 
-    private func backgroundAndCheckPrivacyLock(_ app: XCUIApplication, covering element: XCUIElement) {
+    private func backgroundAndCheckPrivacyLock(_ app: XCUIApplication, covering element: XCUIElement, screenshot: String) {
         XCUIDevice.shared.press(.home)
         let backgrounded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             app.state == .runningBackground || app.state == .runningBackgroundSuspended
@@ -780,6 +820,7 @@ final class SmokeTests: XCTestCase {
         let unlock = shield.buttons["unlockApp"].firstMatch
         XCTAssertTrue(unlock.waitForExistence(timeout: 5))
         XCTAssertTrue(unlock.isHittable)
+        shot(app, screenshot)
         XCTAssertFalse(app.keyboards.firstMatch.isHittable, "锁屏时不得显示底层表单的键盘或预测栏")
         XCTAssertFalse(element.isHittable, "锁屏必须盖住弹窗里的私密内容")
         unlock.tap()

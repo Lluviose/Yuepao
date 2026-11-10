@@ -47,44 +47,85 @@ struct GirlDraft: Equatable {
     }
 }
 
+/// 由呈现编辑页的页面持有；即使 sheet 的内容重建，也继续使用同一份草稿和媒体清理账本。
+@MainActor
+final class GirlEditSession: ObservableObject, Identifiable {
+    nonisolated let id = UUID()
+    let girl: Girl?
+    let initialDraft: GirlDraft
+    let originalAvatar: String?
+    /// 从档案页某个小节打开时，跟会话一起保留跳转目标。
+    let focus: String?
+
+    @Published var draft: GirlDraft
+    @Published private(set) var newPhotoIDs: [String] = []
+    private(set) var isFinished = false
+
+    init(girl: Girl?, focus: String? = nil) {
+        self.girl = girl
+        self.focus = focus
+        let draft = GirlDraft(girl)
+        self.draft = draft
+        initialDraft = draft
+        originalAvatar = girl?.avatarID
+    }
+
+    var isDirty: Bool { draft != initialDraft || !newPhotoIDs.isEmpty }
+
+    func useImportedAvatar(_ id: String) {
+        // 导入可能晚于保存、取消或下拉关闭完成，不能再把照片留在已结束的会话里。
+        guard !isFinished else {
+            MediaStore.shared.delete([id])
+            return
+        }
+        newPhotoIDs.append(id)
+        draft.avatarID = id
+    }
+
+    func discard() {
+        guard !isFinished else { return }
+        isFinished = true
+        MediaStore.shared.delete(newPhotoIDs)
+        newPhotoIDs.removeAll()
+    }
+
+    func finishSaving() {
+        guard !isFinished else { return }
+        isFinished = true
+        // 清理没用上的新头像，以及被替换掉的旧头像。
+        var toDelete = newPhotoIDs.filter { $0 != draft.avatarID }
+        if let old = originalAvatar, old != draft.avatarID { toDelete.append(old) }
+        MediaStore.shared.delete(toDelete)
+        newPhotoIDs.removeAll()
+    }
+}
+
 /// 新建 / 编辑档案：顶部是头像、代号、关系和位分，其余资料按类别折叠成卡片，收起时显示已填的摘要
 struct GirlEditView: View {
-    let girl: Girl?
+    @ObservedObject private var session: GirlEditSession
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Query(sort: \Girl.createdAt) private var allGirls: [Girl]
     @ObservedObject private var config = ConfigStore.shared
 
-    @State private var draft: GirlDraft
     @State private var avatarItem: PhotosPickerItem?
-    @State private var newPhotoIDs: [String] = []
     @State private var confirmDiscard = false
     /// 分区索引点到哪一块，就把那张卡片展开
     @State private var reveal: [String: Int] = [:]
     /// 别的档案里各个城市填过的常驻区域，打开时整理一次，用来给输入提示
     @State private var knownDistricts: [String: [String]] = [:]
     @FocusState private var nameFocused: Bool
-    private let originalAvatar: String?
-    private let initialDraft: GirlDraft
-    /// 打开后直接跳到哪一块（从档案页某个小节点「编辑」进来时）
-    private let focus: String?
     /// 新建的档案存好以后告诉外面一声（列表会直接进到这份新档案里）
     private let onCreate: ((Girl) -> Void)?
 
-    init(girl: Girl?, focus: String? = nil, onCreate: ((Girl) -> Void)? = nil) {
-        self.girl = girl
-        self.focus = focus
+    init(session: GirlEditSession, onCreate: ((Girl) -> Void)? = nil) {
+        self.session = session
         self.onCreate = onCreate
-        let d = GirlDraft(girl)
-        _draft = State(initialValue: d)
-        initialDraft = d
-        originalAvatar = girl?.avatarID
     }
 
+    private var girl: Girl? { session.girl }
     private var isNew: Bool { girl == nil }
-
-    private var isDirty: Bool { draft != initialDraft || !newPhotoIDs.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -115,7 +156,7 @@ struct GirlEditView: View {
                 }
                 .onAppear {
                     indexDistricts()
-                    guard let focus else { return }
+                    guard let focus = session.focus else { return }
                     // 等弹窗动画结束再跳
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
                         jump(to: focus, proxy: proxy)
@@ -133,7 +174,7 @@ struct GirlEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }
                         .fontWeight(.semibold)
-                        .disabled(draft.name.trimmed.isEmpty)
+                        .disabled(session.draft.name.trimmed.isEmpty)
                         .accessibilityIdentifier("saveGirl")
                 }
             }
@@ -144,8 +185,7 @@ struct GirlEditView: View {
                        let id = await Task.detached(priority: .userInitiated, operation: {
                            try? MediaStore.shared.importAvatar(data: data)
                        }).value {
-                        newPhotoIDs.append(id)
-                        withAnimation(.snappy(duration: 0.35)) { draft.avatarID = id }
+                        withAnimation(.snappy(duration: 0.35)) { session.useImportedAvatar(id) }
                     }
                     avatarItem = nil
                 }
@@ -153,10 +193,14 @@ struct GirlEditView: View {
             .onAppear {
                 guard isNew else { return }
                 // 等弹窗动画结束再弹键盘
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { nameFocused = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    guard !session.isFinished, !AppLock.shared.isLocked,
+                          UIApplication.shared.applicationState == .active else { return }
+                    nameFocused = true
+                }
             }
         }
-        .interactiveDismissDisabled(isDirty)
+        .interactiveDismissDisabled(session.isDirty)
         .confirmationDialog("放弃这次的修改？", isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("放弃修改", role: .destructive) { discard() }
             Button("继续编辑", role: .cancel) {}
@@ -166,11 +210,11 @@ struct GirlEditView: View {
     // MARK: 分区索引
 
     private var railItems: [FormRailItem] {
-        let d = draft.details
+        let d = session.draft.details
         let basic = !d.realName.trimmed.isEmpty || d.birthday != nil || !d.mbti.isEmpty
             || !d.personality.isEmpty || !d.tags.isEmpty
         let social = !d.occupation.isEmpty || !d.education.isEmpty || !d.school.isEmpty || !d.hometown.isEmpty
-            || !d.maritalStatus.isEmpty || !d.district.isEmpty || !draft.city.trimmed.isEmpty || draft.coordinate != nil
+            || !d.maritalStatus.isEmpty || !d.district.isEmpty || !session.draft.city.trimmed.isEmpty || session.draft.coordinate != nil
         let harem = d.ratingLooks > 0 || d.ratingBody > 0 || d.ratingPersonality > 0 || d.ratingSex > 0
             || d.ratingOverall > 0 || d.awarenessLevel != .unset || d.contactGoalDays > 0
         var items = [
@@ -207,7 +251,7 @@ struct GirlEditView: View {
 
     /// 别的档案里填过的城市，填得多的排前面。点一下直接填，免得同一个城市写出两种写法
     private var citySuggestions: [String] {
-        let current = draft.city.trimmed
+        let current = session.draft.city.trimmed
         var counts: [String: Int] = [:]
         for g in allGirls where g.id != girl?.id {
             let city = g.city.trimmed
@@ -219,8 +263,8 @@ struct GirlEditView: View {
 
     /// 同一个城市里，别的档案填过的常驻区域
     private var districtSuggestions: [String] {
-        let current = draft.details.district.trimmed
-        let list = knownDistricts[draft.city.trimmed] ?? []
+        let current = session.draft.details.district.trimmed
+        let list = knownDistricts[session.draft.city.trimmed] ?? []
         return Array(list.filter { Self.suggests($0, for: current) }.prefix(5))
     }
 
@@ -248,9 +292,9 @@ struct GirlEditView: View {
         VStack(spacing: 18) {
             VStack(spacing: 10) {
                 avatarPicker
-                if draft.avatarID != nil {
+                if session.draft.avatarID != nil {
                     Button("移除头像", role: .destructive) {
-                        withAnimation(.snappy(duration: 0.3)) { draft.avatarID = nil }
+                        withAnimation(.snappy(duration: 0.3)) { session.draft.avatarID = nil }
                     }
                     .font(.caption)
                     .buttonStyle(.borderless)
@@ -258,7 +302,7 @@ struct GirlEditView: View {
                 }
             }
             VStack(spacing: 8) {
-                TextField("她的代号", text: $draft.name)
+                TextField("她的代号", text: $session.draft.name)
                     .font(Typo.display(28))
                     .multilineTextAlignment(.center)
                     .submitLabel(.done)
@@ -283,11 +327,11 @@ struct GirlEditView: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "关系")
-                StatusPicker(status: $draft.status)
+                StatusPicker(status: $session.draft.status)
             }
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "位分")
-                TagCloud(key: .ranks, selection: $draft.rank.asSingleSelection, tint: Palette.gold)
+                TagCloud(key: .ranks, selection: $session.draft.rank.asSingleSelection, tint: Palette.gold)
             }
         }
         .padding(.horizontal, 16)
@@ -300,18 +344,18 @@ struct GirlEditView: View {
 
     /// 代号和别的档案重名
     private var duplicateName: String? {
-        let name = draft.name.trimmed
-        guard !name.isEmpty, name != initialDraft.name.trimmed else { return nil }
+        let name = session.draft.name.trimmed
+        guard !name.isEmpty, name != session.initialDraft.name.trimmed else { return nil }
         return allGirls.contains { $0.id != girl?.id && $0.name.trimmed == name } ? name : nil
     }
 
     private var avatarPicker: some View {
         PhotosPicker(selection: $avatarItem, matching: .images) {
-            AvatarView(photoID: draft.avatarID, name: draft.name.trimmed.isEmpty ? "?" : draft.name, size: 104)
+            AvatarView(photoID: session.draft.avatarID, name: session.draft.name.trimmed.isEmpty ? "?" : session.draft.name, size: 104)
                 .overlay(Circle().stroke(Color.white.opacity(0.75), lineWidth: 3))
                 .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
                 .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: draft.avatarID == nil ? "camera.fill" : "arrow.triangle.2.circlepath")
+                    Image(systemName: session.draft.avatarID == nil ? "camera.fill" : "arrow.triangle.2.circlepath")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
@@ -319,11 +363,11 @@ struct GirlEditView: View {
                         .overlay(Circle().stroke(Palette.surface, lineWidth: 3))
                         .offset(x: 2, y: 2)
                 }
-                .id(draft.avatarID ?? "none")
+                .id(session.draft.avatarID ?? "none")
                 .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(draft.avatarID == nil ? "选择头像" : "更换头像")
+        .accessibilityLabel(session.draft.avatarID == nil ? "选择头像" : "更换头像")
         .accessibilityIdentifier("pickAvatar")
     }
 
@@ -332,7 +376,7 @@ struct GirlEditView: View {
         let card = Palette.surface
         return ZStack {
             card
-            if let id = draft.avatarID, let image = MediaStore.shared.thumbnail(id, size: 192) {
+            if let id = session.draft.avatarID, let image = MediaStore.shared.thumbnail(id, size: 192) {
                 Color.clear
                     .overlay {
                         Image(uiImage: image)
@@ -343,9 +387,9 @@ struct GirlEditView: View {
                     }
                     .clipped()
             } else {
-                Palette.avatarGradient(for: draft.name.trimmed.isEmpty ? "?" : draft.name)
+                Palette.avatarGradient(for: session.draft.name.trimmed.isEmpty ? "?" : session.draft.name)
                     .opacity(0.3)
-                    .animation(.smooth(duration: 0.6), value: draft.name)
+                    .animation(.smooth(duration: 0.6), value: session.draft.name)
             }
             LinearGradient(colors: [.clear, card.opacity(0.96)],
                            startPoint: UnitPoint(x: 0.5, y: 0.2), endPoint: UnitPoint(x: 0.5, y: 0.62))
@@ -355,7 +399,7 @@ struct GirlEditView: View {
     // MARK: 基本信息
 
     private var basicSummary: String {
-        let d = draft.details
+        let d = session.draft.details
         let age = Fmt.age(d.birthday).map { "\($0) 岁" }
         return FoldCardSummary.join([age, Fmt.zodiac(d.birthday), d.mbti,
                                      d.personality.prefix(3).joined(separator: "、")])
@@ -364,12 +408,12 @@ struct GirlEditView: View {
     private var basicCard: some View {
         FoldCard("基本信息", symbol: "person.text.rectangle", summary: basicSummary,
                  expanded: isNew, identifier: "fold-basic", reveal: reveal["basic", default: 0]) {
-            CardField(title: "真名", text: $draft.details.realName, prompt: "只有你看得到，默认打码")
+            CardField(title: "真名", text: $session.draft.details.realName, prompt: "只有你看得到，默认打码")
             Divider()
             VStack(alignment: .leading, spacing: 6) {
-                DateFieldRow(title: "生日", date: $draft.details.birthday, yearsAgo: 24)
-                if let age = Fmt.age(draft.details.birthday) {
-                    Text("\(age) 岁 · \(Fmt.zodiac(draft.details.birthday) ?? "")")
+                DateFieldRow(title: "生日", date: $session.draft.details.birthday, yearsAgo: 24)
+                if let age = Fmt.age(session.draft.details.birthday) {
+                    Text("\(age) 岁 · \(Fmt.zodiac(session.draft.details.birthday) ?? "")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
@@ -378,17 +422,17 @@ struct GirlEditView: View {
             Divider()
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "MBTI")
-                MBTIPicker(mbti: $draft.details.mbti)
+                MBTIPicker(mbti: $session.draft.details.mbti)
             }
             Divider()
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "性格")
-                TagCloud(key: .personality, selection: $draft.details.personality)
+                TagCloud(key: .personality, selection: $session.draft.details.personality)
             }
             Divider()
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "标签")
-                TagCloud(key: .tags, selection: $draft.details.tags, tint: Palette.gold)
+                TagCloud(key: .tags, selection: $session.draft.details.tags, tint: Palette.gold)
             }
         }
     }
@@ -396,7 +440,7 @@ struct GirlEditView: View {
     // MARK: 认识经过
 
     private var metSummary: String {
-        let d = draft.details
+        let d = session.draft.details
         return FoldCardSummary.join([d.channel, d.metDate.map { "认识于 " + Fmt.date($0) },
                                      d.introducer.trimmed.isEmpty ? nil : "\(d.introducer)介绍"])
     }
@@ -406,16 +450,16 @@ struct GirlEditView: View {
                  expanded: isNew, identifier: "fold-met", reveal: reveal["met", default: 0]) {
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "认识渠道")
-                TagCloud(key: .channels, selection: $draft.details.channel.asSingleSelection)
+                TagCloud(key: .channels, selection: $session.draft.details.channel.asSingleSelection)
             }
             Divider()
-            DateFieldRow(title: "认识日期", date: $draft.details.metDate)
+            DateFieldRow(title: "认识日期", date: $session.draft.details.metDate)
             Divider()
-            DateFieldRow(title: "首次见面", date: $draft.details.firstDateDate)
+            DateFieldRow(title: "首次见面", date: $session.draft.details.firstDateDate)
             Divider()
-            CardField(title: "介绍人", text: $draft.details.introducer)
+            CardField(title: "介绍人", text: $session.draft.details.introducer)
             Divider()
-            CardField(title: "怎么认识的", text: $draft.details.howWeMet,
+            CardField(title: "怎么认识的", text: $session.draft.details.howWeMet,
                       prompt: "第一次聊了什么、怎么约出来的…", multiline: true)
         }
     }
@@ -423,7 +467,7 @@ struct GirlEditView: View {
     // MARK: 身材外貌
 
     private var bodySummary: String {
-        let d = draft.details
+        let d = session.draft.details
         let hasMeasures = d.bust != nil || d.waist != nil || d.hips != nil
         let measures = hasMeasures
             ? [d.bust, d.waist, d.hips].map { v in v.map { "\($0)" } ?? "?" }.joined(separator: "-")
@@ -435,24 +479,24 @@ struct GirlEditView: View {
     private var bodyCard: some View {
         FoldCard("身材外貌", symbol: "figure.stand", summary: bodySummary, identifier: "fold-body", reveal: reveal["body", default: 0]) {
             HStack(spacing: 10) {
-                NumberTile(title: "身高", value: $draft.details.height, unit: "cm")
-                NumberTile(title: "体重", value: $draft.details.weight, unit: "kg")
+                NumberTile(title: "身高", value: $session.draft.details.height, unit: "cm")
+                NumberTile(title: "体重", value: $session.draft.details.weight, unit: "kg")
             }
             HStack(spacing: 10) {
-                NumberTile(title: "胸围", value: $draft.details.bust, unit: "cm", size: 20)
-                NumberTile(title: "腰围", value: $draft.details.waist, unit: "cm", size: 20)
-                NumberTile(title: "臀围", value: $draft.details.hips, unit: "cm", size: 20)
+                NumberTile(title: "胸围", value: $session.draft.details.bust, unit: "cm", size: 20)
+                NumberTile(title: "腰围", value: $session.draft.details.waist, unit: "cm", size: 20)
+                NumberTile(title: "臀围", value: $session.draft.details.hips, unit: "cm", size: 20)
             }
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "罩杯")
-                TagCloud(key: .cups, selection: $draft.details.cup.asSingleSelection)
+                TagCloud(key: .cups, selection: $session.draft.details.cup.asSingleSelection)
             }
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "体型")
-                TagCloud(key: .bodyTypes, selection: $draft.details.bodyType.asSingleSelection)
+                TagCloud(key: .bodyTypes, selection: $session.draft.details.bodyType.asSingleSelection)
             }
             Divider()
-            CardField(title: "外貌特征", text: $draft.details.appearance,
+            CardField(title: "外貌特征", text: $session.draft.details.appearance,
                       prompt: "发型、纹身、痣、穿衣风格…", multiline: true)
         }
     }
@@ -460,42 +504,42 @@ struct GirlEditView: View {
     // MARK: 社会信息
 
     private var socialSummary: String {
-        let d = draft.details
-        let place = [draft.city, d.district].map(\.trimmed).filter { !$0.isEmpty }.joined(separator: " ")
+        let d = session.draft.details
+        let place = [session.draft.city, d.district].map(\.trimmed).filter { !$0.isEmpty }.joined(separator: " ")
         return FoldCardSummary.join([d.occupation, d.education, place, d.maritalStatus])
     }
 
     private var socialCard: some View {
         FoldCard("社会信息", symbol: "briefcase", summary: socialSummary, identifier: "fold-social", reveal: reveal["social", default: 0]) {
             Group {
-                CardField(title: "职业 / 行业", text: $draft.details.occupation)
+                CardField(title: "职业 / 行业", text: $session.draft.details.occupation)
                 Divider()
                 VStack(alignment: .leading, spacing: 10) {
                     FieldLabel(title: "学历")
-                    TagCloud(key: .education, selection: $draft.details.education.asSingleSelection)
+                    TagCloud(key: .education, selection: $session.draft.details.education.asSingleSelection)
                 }
                 Divider()
-                CardField(title: "学校", text: $draft.details.school)
+                CardField(title: "学校", text: $session.draft.details.school)
                 Divider()
-                CardField(title: "籍贯", text: $draft.details.hometown)
+                CardField(title: "籍贯", text: $session.draft.details.hometown)
                 Divider()
             }
             Group {
                 VStack(alignment: .leading, spacing: 10) {
                     FieldLabel(title: "感情状况")
-                    TagCloud(key: .maritalStatus, selection: $draft.details.maritalStatus.asSingleSelection)
+                    TagCloud(key: .maritalStatus, selection: $session.draft.details.maritalStatus.asSingleSelection)
                 }
                 Divider()
-                CardField(title: "城市", text: $draft.city)
+                CardField(title: "城市", text: $session.draft.city)
                 let cities = citySuggestions
                 if !cities.isEmpty {
-                    SuggestionChips(items: cities) { draft.city = $0 }
+                    SuggestionChips(items: cities) { session.draft.city = $0 }
                 }
                 Divider()
-                CardField(title: "常驻区域", text: $draft.details.district, prompt: "区 / 商圈")
+                CardField(title: "常驻区域", text: $session.draft.details.district, prompt: "区 / 商圈")
                 let districts = districtSuggestions
                 if !districts.isEmpty {
-                    SuggestionChips(items: districts) { draft.details.district = $0 }
+                    SuggestionChips(items: districts) { session.draft.details.district = $0 }
                 }
                 Divider()
                 locationRow
@@ -506,11 +550,11 @@ struct GirlEditView: View {
     private var locationRow: some View {
         HStack(spacing: 10) {
             NavigationLink {
-                LocationPickerView(initial: draft.coordinate) { picked in
-                    draft.latitude = picked.coordinate.latitude
-                    draft.longitude = picked.coordinate.longitude
-                    if !picked.city.isEmpty { draft.city = picked.city }
-                    if !picked.district.isEmpty { draft.details.district = picked.district }
+                LocationPickerView(initial: session.draft.coordinate) { picked in
+                    session.draft.latitude = picked.coordinate.latitude
+                    session.draft.longitude = picked.coordinate.longitude
+                    if !picked.city.isEmpty { session.draft.city = picked.city }
+                    if !picked.district.isEmpty { session.draft.details.district = picked.district }
                 }
             } label: {
                 HStack(spacing: 12) {
@@ -518,7 +562,7 @@ struct GirlEditView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("常驻位置")
                             .foregroundStyle(.primary)
-                        Text(draft.coordinate == nil ? "设置后她会出现在地图上" : "已设置")
+                        Text(session.draft.coordinate == nil ? "设置后她会出现在地图上" : "已设置")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -530,11 +574,11 @@ struct GirlEditView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if draft.coordinate != nil {
+            if session.draft.coordinate != nil {
                 removeButton {
                     withAnimation(.snappy) {
-                        draft.latitude = nil
-                        draft.longitude = nil
+                        session.draft.latitude = nil
+                        session.draft.longitude = nil
                     }
                 }
             }
@@ -544,11 +588,11 @@ struct GirlEditView: View {
     // MARK: 联系方式
 
     private var contactCard: some View {
-        let types = draft.details.contacts.filter { !$0.value.trimmed.isEmpty }.map(\.type)
+        let types = session.draft.details.contacts.filter { !$0.value.trimmed.isEmpty }.map(\.type)
         return FoldCard("联系方式", symbol: "phone",
                         summary: types.isEmpty ? FoldCardSummary.empty : types.joined(separator: "、"),
                         identifier: "fold-contacts", reveal: reveal["contacts", default: 0]) {
-            ForEach($draft.details.contacts) { $contact in
+            ForEach($session.draft.details.contacts) { $contact in
                 HStack(spacing: 10) {
                     Menu {
                         ForEach(config.options(.contactTypes), id: \.self) { t in
@@ -562,7 +606,7 @@ struct GirlEditView: View {
                 }
             }
             addRowButton("添加联系方式") {
-                draft.details.contacts.append(ContactItem(type: config.options(.contactTypes).first ?? "微信"))
+                session.draft.details.contacts.append(ContactItem(type: config.options(.contactTypes).first ?? "微信"))
             }
         }
     }
@@ -570,14 +614,14 @@ struct GirlEditView: View {
     // MARK: 后宫属性
 
     private var haremSummary: String {
-        let d = draft.details
+        let d = session.draft.details
         return FoldCardSummary.join(["亲密度 \(d.intimacy)",
                                      d.ratingOverall > 0 ? "综合 \(d.ratingOverall) 分" : nil,
                                      d.awarenessLevel == .unset ? nil : d.awarenessLevel.title])
     }
 
     private var intimacyBinding: Binding<Double> {
-        Binding(get: { Double(draft.details.intimacy) }, set: { draft.details.intimacy = Int($0) })
+        Binding(get: { Double(session.draft.details.intimacy) }, set: { session.draft.details.intimacy = Int($0) })
     }
 
     private var haremCard: some View {
@@ -586,7 +630,7 @@ struct GirlEditView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("亲密度")
                     Spacer(minLength: 8)
-                    Text("\(draft.details.intimacy)")
+                    Text("\(session.draft.details.intimacy)")
                         .font(Typo.display(22, weight: .semibold))
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -595,23 +639,23 @@ struct GirlEditView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Slider(value: intimacyBinding, in: 0...100, step: 1)
-                    .tint(draft.status.color)
+                    .tint(session.draft.status.color)
             }
             Divider()
             VStack(spacing: 2) {
-                ScoreBar(title: "颜值", value: $draft.details.ratingLooks)
-                ScoreBar(title: "身材", value: $draft.details.ratingBody)
-                ScoreBar(title: "性格", value: $draft.details.ratingPersonality)
-                ScoreBar(title: "床上表现", value: $draft.details.ratingSex)
-                ScoreBar(title: "综合", value: $draft.details.ratingOverall)
+                ScoreBar(title: "颜值", value: $session.draft.details.ratingLooks)
+                ScoreBar(title: "身材", value: $session.draft.details.ratingBody)
+                ScoreBar(title: "性格", value: $session.draft.details.ratingPersonality)
+                ScoreBar(title: "床上表现", value: $session.draft.details.ratingSex)
+                ScoreBar(title: "综合", value: $session.draft.details.ratingOverall)
             }
             Divider()
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "她知道你有别人吗")
                 FlowLayout(spacing: 8) {
                     ForEach(Awareness.allCases.filter { $0 != .unset }) { a in
-                        ChoiceChip(title: a.title, selected: draft.details.awarenessLevel == a) {
-                            draft.details.awarenessLevel = draft.details.awarenessLevel == a ? .unset : a
+                        ChoiceChip(title: a.title, selected: session.draft.details.awarenessLevel == a) {
+                            session.draft.details.awarenessLevel = session.draft.details.awarenessLevel == a ? .unset : a
                         }
                     }
                 }
@@ -621,8 +665,8 @@ struct GirlEditView: View {
                 FieldLabel(title: "联系频率目标")
                 ScrollChips {
                     ForEach(Choices.contactGoals, id: \.self) { days in
-                        ChoiceChip(title: days == 0 ? "不提醒" : "\(days) 天", selected: draft.details.contactGoalDays == days) {
-                            draft.details.contactGoalDays = days
+                        ChoiceChip(title: days == 0 ? "不提醒" : "\(days) 天", selected: session.draft.details.contactGoalDays == days) {
+                            session.draft.details.contactGoalDays = days
                         }
                     }
                 }
@@ -640,11 +684,11 @@ struct GirlEditView: View {
     }
 
     private var circleCard: some View {
-        let count = draft.details.connections.filter { $0.girlID != nil }.count
+        let count = session.draft.details.connections.filter { $0.girlID != nil }.count
         return FoldCard("社交圈交集", symbol: "person.2",
                         summary: count == 0 ? FoldCardSummary.empty : "和 \(count) 位档案里的人认识",
                         identifier: "fold-circle", reveal: reveal["circle", default: 0]) {
-            ForEach($draft.details.connections) { $conn in
+            ForEach($session.draft.details.connections) { $conn in
                 HStack(spacing: 10) {
                     Menu {
                         Button("不选") { conn.girlID = nil }
@@ -664,7 +708,7 @@ struct GirlEditView: View {
                     .foregroundStyle(.secondary)
             } else {
                 addRowButton("添加关联档案") {
-                    draft.details.connections.append(Connection())
+                    session.draft.details.connections.append(Connection())
                 }
             }
             Text("记下她和其他档案的关系，避免撞车。")
@@ -676,26 +720,26 @@ struct GirlEditView: View {
     // MARK: 偏好与雷区
 
     private var preferenceSummary: String {
-        let d = draft.details
+        let d = session.draft.details
         return FoldCardSummary.join([d.favoriteFood, d.hobbies, d.drinks, d.taboos.isEmpty ? nil : "有雷点"])
     }
 
     private var preferenceCard: some View {
         FoldCard("偏好与雷区", symbol: "heart.text.square", summary: preferenceSummary, identifier: "fold-preference", reveal: reveal["preference", default: 0]) {
             Group {
-                CardField(title: "爱吃", text: $draft.details.favoriteFood, prompt: "日料、火锅…", multiline: true)
+                CardField(title: "爱吃", text: $session.draft.details.favoriteFood, prompt: "日料、火锅…", multiline: true)
                 Divider()
-                CardField(title: "忌口", text: $draft.details.dislikedFood, multiline: true)
+                CardField(title: "忌口", text: $session.draft.details.dislikedFood, multiline: true)
                 Divider()
-                CardField(title: "喜欢的饮品", text: $draft.details.drinks, multiline: true)
+                CardField(title: "喜欢的饮品", text: $session.draft.details.drinks, multiline: true)
                 Divider()
             }
             Group {
-                CardField(title: "爱好", text: $draft.details.hobbies, multiline: true)
+                CardField(title: "爱好", text: $session.draft.details.hobbies, multiline: true)
                 Divider()
-                CardField(title: "喜欢的礼物 / 品牌", text: $draft.details.giftPrefs, multiline: true)
+                CardField(title: "喜欢的礼物 / 品牌", text: $session.draft.details.giftPrefs, multiline: true)
                 Divider()
-                CardField(title: "雷点 / 禁忌话题", text: $draft.details.taboos, multiline: true)
+                CardField(title: "雷点 / 禁忌话题", text: $session.draft.details.taboos, multiline: true)
             }
         }
     }
@@ -703,7 +747,7 @@ struct GirlEditView: View {
     // MARK: 亲密偏好
 
     private var intimacySummary: String {
-        let d = draft.details
+        let d = session.draft.details
         return FoldCardSummary.join([d.traits.prefix(3).joined(separator: "、"),
                                      d.safeWord.trimmed.isEmpty ? nil : "已约定安全词",
                                      d.likedPositions.prefix(2).joined(separator: "、")])
@@ -713,32 +757,32 @@ struct GirlEditView: View {
         FoldCard("亲密偏好", symbol: "flame", summary: intimacySummary, identifier: "fold-intimacy", reveal: reveal["intimacy", default: 0]) {
             VStack(spacing: 0) {
                 TagDisclosure(title: "特质 / 性癖", symbol: "tag", key: .traits,
-                              selection: $draft.details.traits, tint: Palette.gold)
+                              selection: $session.draft.details.traits, tint: Palette.gold)
                 RowDivider()
                 TagDisclosure(title: "喜欢的体位", symbol: "square.grid.2x2", key: .positions,
-                              selection: $draft.details.likedPositions)
+                              selection: $session.draft.details.likedPositions)
                 RowDivider()
                 TagDisclosure(title: "喜欢的玩法", symbol: "wand.and.stars", key: .play,
-                              selection: $draft.details.likedPlay)
+                              selection: $session.draft.details.likedPlay)
                 RowDivider()
                 TagDisclosure(title: "喜欢的道具", symbol: "sparkles", key: .toys,
-                              selection: $draft.details.likedToys)
+                              selection: $session.draft.details.likedToys)
                 RowDivider()
                 TagDisclosure(title: "事后需要", symbol: "hands.sparkles", key: .aftercare,
-                              selection: $draft.details.aftercareNeeds, tint: Palette.status)
+                              selection: $session.draft.details.aftercareNeeds, tint: Palette.status)
             }
             Divider()
             Group {
-                CardField(title: "安全词", text: $draft.details.safeWord, prompt: "约定好叫停的词")
+                CardField(title: "安全词", text: $session.draft.details.safeWord, prompt: "约定好叫停的词")
                 Divider()
-                CardField(title: "底线 / 明确不接受的", text: $draft.details.boundaries, multiline: true)
+                CardField(title: "底线 / 明确不接受的", text: $session.draft.details.boundaries, multiline: true)
                 Divider()
-                CardField(title: "敏感点", text: $draft.details.sensitiveSpots, multiline: true)
+                CardField(title: "敏感点", text: $session.draft.details.sensitiveSpots, multiline: true)
                 Divider()
-                CardField(title: "避孕约定", text: $draft.details.contraception, multiline: true)
+                CardField(title: "避孕约定", text: $session.draft.details.contraception, multiline: true)
                 Divider()
             }
-            Stepper("经期一般持续 \(draft.details.periodLength) 天", value: $draft.details.periodLength, in: 2...10)
+            Stepper("经期一般持续 \(session.draft.details.periodLength) 天", value: $session.draft.details.periodLength, in: 2...10)
             Text("玩得重一点之前先约好安全词，听到就停。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -751,7 +795,7 @@ struct GirlEditView: View {
     private var customCard: some View {
         let fields = config.config.customFields
         if !fields.isEmpty {
-            let filled = fields.filter { !(draft.details.customValues[$0.id.uuidString] ?? "").isEmpty }.count
+            let filled = fields.filter { !(session.draft.details.customValues[$0.id.uuidString] ?? "").isEmpty }.count
             FoldCard("自定义字段", symbol: "slider.horizontal.3",
                      summary: filled == 0 ? FoldCardSummary.empty : "已填 \(filled) / \(fields.count)",
                      identifier: "fold-custom", reveal: reveal["custom", default: 0]) {
@@ -765,16 +809,16 @@ struct GirlEditView: View {
 
     private func customBinding(_ key: String) -> Binding<String> {
         Binding(
-            get: { draft.details.customValues[key] ?? "" },
-            set: { draft.details.customValues[key] = $0.isEmpty ? nil : $0 }
+            get: { session.draft.details.customValues[key] ?? "" },
+            set: { session.draft.details.customValues[key] = $0.isEmpty ? nil : $0 }
         )
     }
 
     private var notesCard: some View {
-        let notes = draft.details.notes.trimmed
+        let notes = session.draft.details.notes.trimmed
         return FoldCard("备注", symbol: "note.text", summary: notes.isEmpty ? FoldCardSummary.empty : notes,
                         identifier: "fold-notes", reveal: reveal["notes", default: 0]) {
-            TextField("其他想记的", text: $draft.details.notes, axis: .vertical)
+            TextField("其他想记的", text: $session.draft.details.notes, axis: .vertical)
                 .lineLimit(3...12)
         }
     }
@@ -821,21 +865,21 @@ struct GirlEditView: View {
     private func removeContact(_ id: UUID) {
         hideKeyboard()
         DispatchQueue.main.async {
-            withAnimation(.snappy) { draft.details.contacts.removeAll { $0.id == id } }
+            withAnimation(.snappy) { session.draft.details.contacts.removeAll { $0.id == id } }
         }
     }
 
     private func removeConnection(_ id: UUID) {
         hideKeyboard()
         DispatchQueue.main.async {
-            withAnimation(.snappy) { draft.details.connections.removeAll { $0.id == id } }
+            withAnimation(.snappy) { session.draft.details.connections.removeAll { $0.id == id } }
         }
     }
 
     // MARK: Actions
 
     private func cancel() {
-        if isDirty {
+        if session.isDirty {
             confirmDiscard = true
         } else {
             discard()
@@ -843,11 +887,12 @@ struct GirlEditView: View {
     }
 
     private func discard() {
-        MediaStore.shared.delete(newPhotoIDs)
+        session.discard()
         dismiss()
     }
 
     private func save() {
+        guard !session.isFinished else { return }
         let isNew = girl == nil
         let target: Girl
         if let girl {
@@ -856,13 +901,9 @@ struct GirlEditView: View {
             target = Girl()
             context.insert(target)
         }
-        draft.apply(to: target, isNew: isNew)
+        session.draft.apply(to: target, isNew: isNew)
 
-        // 清理没用上的新头像，以及被替换掉的旧头像
-        let unused = newPhotoIDs.filter { $0 != draft.avatarID }
-        var toDelete = unused
-        if let old = originalAvatar, old != draft.avatarID { toDelete.append(old) }
-        MediaStore.shared.delete(toDelete)
+        session.finishSaving()
 
         try? context.save()
         Haptics.success()

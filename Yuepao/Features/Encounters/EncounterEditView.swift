@@ -1027,7 +1027,14 @@ struct GirlMultiSelectView: View {
 
     @Query(sort: \Girl.createdAt, order: .reverse) private var girls: [Girl]
     @State private var search = ""
-    @State private var creating = false
+    @State private var editSession: GirlEditSession?
+
+    private var editSessionBinding: Binding<GirlEditSession?> {
+        Binding(get: { editSession }, set: { session in
+            if session == nil { editSession?.discard() }
+            editSession = session
+        })
+    }
 
     private var sorted: [Girl] {
         let q = search.trimmed
@@ -1042,7 +1049,7 @@ struct GirlMultiSelectView: View {
         List {
             Section {
                 Button {
-                    creating = true
+                    editSession = GirlEditSession(girl: nil)
                 } label: {
                     Label("新建档案", systemImage: "person.crop.circle.badge.plus")
                 }
@@ -1076,8 +1083,8 @@ struct GirlMultiSelectView: View {
         .searchable(text: $search, prompt: "搜索")
         .navigationTitle("选择对象")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $creating) {
-            GirlEditView(girl: nil)
+        .sheet(item: editSessionBinding) { session in
+            GirlEditView(session: session)
         }
     }
 

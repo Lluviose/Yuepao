@@ -117,6 +117,7 @@ jobs:
             -project Yuepao.xcodeproj \
             -scheme Yuepao \
             -destination "id=${{ steps.sim.outputs.udid }}" \
+            -parallel-testing-enabled NO \
             -derivedDataPath build-sim \
             -resultBundlePath TestResults.xcresult \
             -quiet 2>&1 | tee test.log

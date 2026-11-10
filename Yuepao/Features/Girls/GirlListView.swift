@@ -11,7 +11,7 @@ struct GirlListView: View {
     @State private var search = ""
     @State private var statusFilter: RelationStatus?
     @State private var rankFilter: String?
-    @State private var creating = false
+    @State private var editSession: GirlEditSession?
     @State private var pendingDelete: Girl?
     @State private var loggingFor: Girl?
     /// 刚建好的档案：弹窗收起后直接进去，接着记一次或补资料
@@ -19,6 +19,14 @@ struct GirlListView: View {
     @Namespace private var zoom
 
     private var sort: GirlSort { GirlSort(rawValue: sortRaw) ?? .recent }
+
+    private var editSessionBinding: Binding<GirlEditSession?> {
+        Binding(get: { editSession }, set: { session in
+            // 包括干净会话的下拉关闭；保存后的 discard 是幂等的。
+            if session == nil { editSession?.discard() }
+            editSession = session
+        })
+    }
 
     private var filtered: [Girl] {
         var list = girls
@@ -93,7 +101,7 @@ struct GirlListView: View {
                 if girls.isEmpty {
                     EmptyState(symbol: "person.crop.circle.badge.plus", title: "还没有档案",
                                message: "建一份档案，把她的样子、喜好和你们的故事记下来",
-                               actionTitle: "新建档案", action: { creating = true })
+                               actionTitle: "新建档案", action: { editSession = GirlEditSession(girl: nil) })
                 } else if filtered.isEmpty {
                     ContentUnavailableView.search
                 }
@@ -106,7 +114,7 @@ struct GirlListView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        creating = true
+                        editSession = GirlEditSession(girl: nil)
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -114,8 +122,8 @@ struct GirlListView: View {
                     .accessibilityIdentifier("addGirl")
                 }
             }
-            .sheet(isPresented: $creating) {
-                GirlEditView(girl: nil, onCreate: { girl in
+            .sheet(item: editSessionBinding) { session in
+                GirlEditView(session: session, onCreate: { girl in
                     // 等弹窗收起再进档案页
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { created = girl }
                 })
