@@ -11,17 +11,21 @@ struct FoldCard<Content: View>: View {
     let summary: String
     var tint: Color
     var identifier: String?
+    /// 外面每加一次，这张卡片就展开（从分区索引跳过来时用）
+    var reveal: Int
     let content: () -> Content
 
     @State private var expanded: Bool
 
     init(_ title: String, symbol: String, summary: String, tint: Color = .accentColor,
-         expanded: Bool = false, identifier: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+         expanded: Bool = false, identifier: String? = nil, reveal: Int = 0,
+         @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.symbol = symbol
         self.summary = summary
         self.tint = tint
         self.identifier = identifier
+        self.reveal = reveal
         self.content = content
         _expanded = State(initialValue: expanded)
     }
@@ -69,6 +73,9 @@ struct FoldCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .fill(Palette.surface))
+        .onChange(of: reveal) { _, _ in
+            withAnimation(.snappy(duration: 0.34)) { expanded = true }
+        }
     }
 }
 

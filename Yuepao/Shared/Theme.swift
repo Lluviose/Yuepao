@@ -189,6 +189,33 @@ struct QuickAction: View {
     }
 }
 
+/// 和 QuickAction 一个样子，点开是一个菜单：放不常用的几种记录
+struct QuickMenu<Items: View>: View {
+    let title: String
+    let symbol: String
+    @ViewBuilder let items: () -> Items
+
+    var body: some View {
+        Menu {
+            items()
+        } label: {
+            VStack(spacing: 7) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 50, height: 50)
+                    .background(Circle().fill(.thinMaterial))
+                    .overlay(Circle().stroke(Palette.hairline, lineWidth: 0.5))
+                Text(title)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.secondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderless)
+    }
+}
+
 /// 提醒 / 风险提示卡片：左侧色条 + 图标 + 文本
 struct Callout: View {
     let symbol: String

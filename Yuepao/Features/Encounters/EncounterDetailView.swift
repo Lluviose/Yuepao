@@ -8,16 +8,21 @@ struct EncounterDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var editing = false
+    /// 点「补上」时，编辑页直接滚到还没记的那一块
+    @State private var editFocus: String?
     @State private var repeating = false
     @State private var confirmDelete = false
     @State private var addingMedia = false
 
     var body: some View {
         let d = encounter.details
+        // 让页面跟着 editFocus 刷新，弹出编辑页时拿到的才是刚设的值
+        let _ = editFocus
         ScrollView {
             VStack(spacing: 14) {
                 hero(d)
                 riskCards(d)
+                completeCard
                 metricsCard(d)
                 photoCard(d)
                 whereCard
@@ -39,7 +44,12 @@ struct EncounterDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button { editing = true } label: { Label("编辑", systemImage: "pencil") }
+                    Button {
+                        editFocus = nil
+                        editing = true
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                    }
                     Button { repeating = true } label: { Label("再记一次", systemImage: "arrow.clockwise.heart") }
                     Divider()
                     Button(role: .destructive) { confirmDelete = true } label: { Label("删除", systemImage: "trash") }
@@ -50,7 +60,7 @@ struct EncounterDetailView: View {
             }
         }
         .sheet(isPresented: $editing) {
-            EncounterEditView(encounter: encounter, presetGirls: [])
+            EncounterEditView(encounter: encounter, presetGirls: [], focus: editFocus)
         }
         .sheet(isPresented: $repeating) {
             EncounterEditView(encounter: nil, presetGirls: encounter.girls, presetPlace: encounter.place)
@@ -167,6 +177,43 @@ struct EncounterDetailView: View {
                 Color.accentColor.opacity(0.12)
             }
             LinearGradient(colors: [.clear, card.opacity(0.92)], startPoint: .center, endPoint: .bottom)
+        }
+    }
+
+    // MARK: 补记
+
+    /// 刚记下不久、还空着的几样要紧的。过了一周就不再提，当时没记的多半也想不起来了
+    private var missingEssentials: [(title: String, focus: String)] {
+        guard Fmt.days(from: encounter.date) <= 7 else { return [] }
+        var items: [(title: String, focus: String)] = []
+        if encounter.protection == .unrecorded { items.append((title: "安全措施", focus: "safety")) }
+        if encounter.rating == 0 { items.append((title: "满意度", focus: "feeling")) }
+        if encounter.place == nil { items.append((title: "地点", focus: "place")) }
+        return items
+    }
+
+    @ViewBuilder
+    private var completeCard: some View {
+        let missing = missingEssentials
+        if let first = missing.first {
+            RecordCard {
+                HStack(spacing: 12) {
+                    IconBadge(symbol: "square.and.pencil", color: Palette.gold, size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("这条还没记全")
+                        Text("还差：" + missing.map { $0.title }.joined(separator: "、"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Button("补上") {
+                        editFocus = first.focus
+                        editing = true
+                    }
+                    .buttonStyle(.quiet)
+                    .accessibilityIdentifier("completeRecord")
+                }
+            }
         }
     }
 

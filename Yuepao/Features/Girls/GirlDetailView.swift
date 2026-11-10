@@ -11,6 +11,8 @@ struct GirlDetailView: View {
     @ObservedObject private var config = ConfigStore.shared
 
     @State private var sheet: DetailSheet?
+    /// 从某个小节点「编辑」时，编辑页直接跳到对应的那一块
+    @State private var editFocus: String?
     @State private var showSensitive = false
     @State private var confirmDelete = false
     @State private var editingTodo: TodoItem?
@@ -30,6 +32,8 @@ struct GirlDetailView: View {
 
     var body: some View {
         let d = girl.details
+        // 让页面跟着 editFocus 刷新，弹出编辑页时拿到的才是刚设的值
+        let _ = editFocus
         List {
             Group {
                 header(d)
@@ -80,7 +84,7 @@ struct GirlDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button { sheet = .edit } label: { Label("编辑档案", systemImage: "pencil") }
+                    Button { edit() } label: { Label("编辑档案", systemImage: "pencil") }
                     Button { sheet = .encounter } label: { Label("记一次", systemImage: "plus.circle") }
                     Divider()
                     Button(role: .destructive) { confirmDelete = true } label: { Label("删除档案", systemImage: "trash") }
@@ -106,7 +110,7 @@ struct GirlDetailView: View {
     private func sheetContent(_ which: DetailSheet) -> some View {
         switch which {
         case .edit:
-            GirlEditView(girl: girl)
+            GirlEditView(girl: girl, focus: editFocus)
         case .encounter:
             EncounterEditView(encounter: nil, presetGirls: [girl])
         case .memo:
@@ -144,6 +148,36 @@ struct GirlDetailView: View {
             }
         case .todo:
             TodoEditView(todo: nil, presetGirl: girl)
+        }
+    }
+
+    /// 打开编辑页；带上小节名就直接跳到那一块
+    private func edit(_ focus: String? = nil) {
+        editFocus = focus
+        sheet = .edit
+    }
+
+    /// 小节标题右边的小笔：点了直接改这一块，不用进编辑页再找
+    private func editButton(_ title: String, focus: String) -> some View {
+        Button {
+            edit(focus)
+        } label: {
+            Image(systemName: "pencil")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .frame(width: 28, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .textCase(nil)
+        .accessibilityLabel("编辑\(title)")
+    }
+
+    private func editableHeader(_ title: String, focus: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            editButton(title, focus: focus)
         }
     }
 
@@ -200,6 +234,13 @@ struct GirlDetailView: View {
                     QuickAction(title: "待办", symbol: "checklist") { sheet = .todo }
                     QuickAction(title: "备忘", symbol: "square.and.pencil") { sheet = .memo }
                         .accessibilityIdentifier("quickMemo")
+                    QuickMenu(title: "更多", symbol: "ellipsis") {
+                        Button { sheet = .said } label: { Label("她说过的事", systemImage: "quote.bubble") }
+                        Button { sheet = .gift } label: { Label("礼物 / 红包", systemImage: "gift") }
+                        Button { sheet = .date } label: { Label("纪念日", systemImage: "calendar.badge.plus") }
+                        Button { sheet = .period } label: { Label("补记经期", systemImage: "drop") }
+                    }
+                    .accessibilityIdentifier("quickMore")
                 }
                 .padding(.top, 4)
             }
@@ -314,12 +355,12 @@ struct GirlDetailView: View {
                     InfoRow(label: "生日", value: Fmt.date(bd))
                 }
             } header: {
-                sensitiveHeader("基本信息")
+                sensitiveHeader("基本信息", focus: "basic")
             }
         }
     }
 
-    private func sensitiveHeader(_ title: String) -> some View {
+    private func sensitiveHeader(_ title: String, focus: String) -> some View {
         HStack {
             Text(title)
             Spacer()
@@ -330,13 +371,14 @@ struct GirlDetailView: View {
             }
             .buttonStyle(.borderless)
             .textCase(nil)
+            editButton(title, focus: focus)
         }
     }
 
     @ViewBuilder
     private func bodyInfo(_ d: GirlDetails) -> some View {
         if d.hasBodyInfo {
-            Section("身材外貌") {
+            Section {
                 let metrics = bodyMetrics(d)
                 if !metrics.isEmpty {
                     MetricStrip(items: metrics)
@@ -344,6 +386,8 @@ struct GirlDetailView: View {
                 }
                 if !d.bodyType.isEmpty { InfoRow(label: "体型", value: d.bodyType) }
                 if !d.appearance.isEmpty { TextBlock(label: "外貌特征", text: d.appearance) }
+            } header: {
+                editableHeader("身材外貌", focus: "body")
             }
         }
     }
@@ -377,7 +421,7 @@ struct GirlDetailView: View {
                     }
                 }
             } header: {
-                sensitiveHeader("社会信息")
+                sensitiveHeader("社会信息", focus: "social")
             }
         }
     }
@@ -385,7 +429,7 @@ struct GirlDetailView: View {
     @ViewBuilder
     private func metInfo(_ d: GirlDetails) -> some View {
         if d.hasMetInfo {
-            Section("认识经过") {
+            Section {
                 if d.metDate != nil || !d.channel.isEmpty {
                     HStack(alignment: .top, spacing: 12) {
                         IconBadge(symbol: "bubble.left.and.bubble.right", color: .accentColor, size: 32)
@@ -402,6 +446,8 @@ struct GirlDetailView: View {
                 if let f = d.firstDateDate { InfoRow(label: "首次见面", value: Fmt.date(f)) }
                 if !d.introducer.isEmpty { InfoRow(label: "介绍人", value: d.introducer) }
                 if !d.howWeMet.isEmpty { TextBlock(label: "经过", text: d.howWeMet) }
+            } header: {
+                editableHeader("认识经过", focus: "met")
             }
         }
     }
@@ -417,7 +463,7 @@ struct GirlDetailView: View {
 
     @ViewBuilder
     private func haremInfo(_ d: GirlDetails) -> some View {
-        Section("后宫属性") {
+        Section {
             IntimacyMeter(value: d.intimacy, tint: girl.status.color)
                 .padding(.vertical, 4)
             let scores = scoreEntries(d)
@@ -447,6 +493,8 @@ struct GirlDetailView: View {
                     LabeledContent("状态变化", value: "\(d.statusHistory.count) 条")
                 }
             }
+        } header: {
+            editableHeader("后宫属性", focus: "harem")
         }
     }
 
@@ -477,7 +525,7 @@ struct GirlDetailView: View {
     @ViewBuilder
     private func preferenceInfo(_ d: GirlDetails) -> some View {
         if d.hasPreferences {
-            Section("偏好与雷区") {
+            Section {
                 if !d.favoriteFood.isEmpty { TextBlock(label: "爱吃", text: d.favoriteFood) }
                 if !d.dislikedFood.isEmpty { TextBlock(label: "忌口", text: d.dislikedFood) }
                 if !d.drinks.isEmpty { TextBlock(label: "饮品", text: d.drinks) }
@@ -487,6 +535,8 @@ struct GirlDetailView: View {
                     TextBlock(label: "雷点 / 禁忌", text: d.taboos)
                         .foregroundStyle(Palette.period)
                 }
+            } header: {
+                editableHeader("偏好与雷区", focus: "preference")
             }
         }
     }
@@ -535,7 +585,7 @@ struct GirlDetailView: View {
                 if !d.sensitiveSpots.isEmpty { TextBlock(label: "敏感点", text: d.sensitiveSpots) }
                 if !d.contraception.isEmpty { TextBlock(label: "避孕约定", text: d.contraception) }
             } header: {
-                Text("亲密档案")
+                editableHeader("亲密档案", focus: "intimacy")
             }
         }
     }

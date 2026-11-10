@@ -26,13 +26,19 @@ struct EncounterEditView: View {
     @State private var originalTraits: [UUID: [String]]
     @State private var riskAlert = false
     @State private var confirmDiscard = false
+    /// 没选对象就点了保存
+    @State private var confirmNoOne = false
     /// 刚加的照片里最早的拍摄时间（和记录时间差得多时提示可以用它）
     @State private var photoDate: Date?
     /// 这次编辑里新加过的照片视频（包括加了又删掉的），取消或保存时清理没用上的文件
     @State private var sessionMedia: Set<String> = []
+    /// 已经照着哪一条记录填过了（填过就不再提示）
+    @State private var reusedFrom: UUID?
 
     private let originalPhotos: Set<String>
     private let initialSnapshot: Snapshot
+    /// 打开后直接滚到哪一块（从记录详情点「补上」进来时）
+    private let focus: String?
 
     /// 用来判断有没有改动
     struct Snapshot: Equatable {
@@ -68,8 +74,10 @@ struct EncounterEditView: View {
         return result
     }
 
-    init(encounter: Encounter?, presetGirls: [Girl], presetDate: Date? = nil, presetPlace: Place? = nil) {
+    init(encounter: Encounter?, presetGirls: [Girl], presetDate: Date? = nil, presetPlace: Place? = nil,
+         focus: String? = nil) {
         self.encounter = encounter
+        self.focus = focus
         _durationMinutes = State(initialValue: encounter?.durationMinutes ?? 0)
         _overnight = State(initialValue: encounter?.overnight ?? false)
         _count = State(initialValue: encounter?.count ?? 1)
@@ -135,23 +143,37 @@ struct EncounterEditView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    whoCard
-                    placeCard
-                    timeCard
-                    processCard
-                    playCard
-                    safetyCard
-                    feelingCard
-                    dateCard
-                    costCard
-                    noteCard
-                    photoCard
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        whoCard.id("who")
+                        placeCard.id("place")
+                        timeCard.id("time")
+                        processCard.id("process")
+                        playCard.id("play")
+                        safetyCard.id("safety")
+                        feelingCard.id("feeling")
+                        dateCard.id("date")
+                        costCard.id("cost")
+                        noteCard.id("note")
+                        photoCard.id("photo")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 36)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-                .padding(.bottom, 36)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    FormRail(items: railItems) { id in
+                        jump(to: id, proxy: proxy)
+                    }
+                }
+                .onAppear {
+                    guard let focus else { return }
+                    // 等弹窗动画结束再滚
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                        jump(to: focus, proxy: proxy)
+                    }
+                }
             }
             .background(Palette.canvas)
             .formKeyboardHandling()
@@ -162,9 +184,15 @@ struct EncounterEditView: View {
                     Button("取消") { cancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
-                        .fontWeight(.semibold)
-                        .accessibilityIdentifier("saveEncounter")
+                    Button("保存") {
+                        if girls.isEmpty {
+                            confirmNoOne = true
+                        } else {
+                            save()
+                        }
+                    }
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("saveEncounter")
                 }
             }
             .alert("这次有风险", isPresented: $riskAlert) {
@@ -176,9 +204,42 @@ struct EncounterEditView: View {
                 Button("放弃修改", role: .destructive) { discard() }
                 Button("继续编辑", role: .cancel) {}
             }
+            .confirmationDialog("还没选对象", isPresented: $confirmNoOne, titleVisibility: .visible) {
+                Button("不选，直接保存") { save() }
+                Button("回去选", role: .cancel) {}
+            } message: {
+                Text("没选对象的记录不会出现在任何人的档案和时间线里。")
+            }
             .onChange(of: girls.map(\.id)) { _, _ in seedTraits() }
         }
         .interactiveDismissDisabled(isDirty)
+    }
+
+    // MARK: 分区索引
+
+    private var railItems: [FormRailItem] {
+        let d = details
+        let feeling = rating > 0 || d.chemistry > 0 || !d.moods.isEmpty || !d.feedback.isEmpty || !d.aftercare.isEmpty
+        return [
+            FormRailItem(id: "who", title: "对象", filled: !girls.isEmpty),
+            FormRailItem(id: "place", title: "地点", filled: place != nil),
+            FormRailItem(id: "time", title: "时长", filled: durationMinutes > 0 || overnight),
+            FormRailItem(id: "process", title: "过程", filled: d.intensity > 0 || d.herOrgasms >= 0 || !d.lead.isEmpty),
+            FormRailItem(id: "play", title: "玩法", filled: !d.highlights.isEmpty),
+            FormRailItem(id: "safety", title: "安全", filled: protection != .unrecorded),
+            FormRailItem(id: "feeling", title: "感受", filled: feeling),
+            FormRailItem(id: "date", title: "约会", filled: !d.activities.isEmpty || !d.initiator.isEmpty),
+            FormRailItem(id: "cost", title: "花费", filled: d.totalCost > 0),
+            FormRailItem(id: "note", title: "备注", filled: !d.notes.trimmed.isEmpty),
+            FormRailItem(id: "photo", title: "照片", filled: !d.photoIDs.isEmpty)
+        ]
+    }
+
+    private func jump(to id: String, proxy: ScrollViewProxy) {
+        hideKeyboard()
+        withAnimation(.snappy(duration: 0.35)) {
+            proxy.scrollTo(id, anchor: .top)
+        }
     }
 
     private var riskMessage: String {
@@ -235,6 +296,79 @@ struct EncounterEditView: View {
         )
     }
 
+    /// 新记录只选了一个人时，她上一次的记录
+    private var lastWithHer: Encounter? {
+        guard encounter == nil, girls.count == 1, let girl = girls.first else { return nil }
+        return girl.encounters.max { $0.date < $1.date }
+    }
+
+    /// 上一次有没有值得照着填的：地点，或者体位、玩法、道具、穿着
+    private func reusableSummary(_ last: Encounter) -> String? {
+        var parts: [String] = []
+        if let place = last.place { parts.append(place.displayName) }
+        let tags = last.details.highlights
+        if !tags.isEmpty { parts.append(EncounterRow.tagLine(tags)) }
+        if parts.isEmpty { return nil }
+        return ([Fmt.shortDate(last.date)] + parts).joined(separator: " · ")
+    }
+
+    /// 只照搬地点和玩法这两样习惯性的，而且只填还空着的。
+    /// 时长、安全措施、次数、评分每次都不一样，照搬了反而会记错
+    private func reuse(_ last: Encounter) {
+        let d = last.details
+        withAnimation(.snappy(duration: 0.3)) {
+            if place == nil { place = last.place }
+            if details.positions.isEmpty { details.positions = d.positions }
+            if details.play.isEmpty { details.play = d.play }
+            if details.toys.isEmpty { details.toys = d.toys }
+            if details.outfits.isEmpty { details.outfits = d.outfits }
+            reusedFrom = last.id
+        }
+        Haptics.light()
+    }
+
+    @ViewBuilder
+    private var reuseRow: some View {
+        if let last = lastWithHer, let summary = reusableSummary(last) {
+            if reusedFrom == last.id {
+                Label("已照上次的填了地点和玩法，改一改不一样的就行", systemImage: "checkmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            } else {
+                Button {
+                    reuse(last)
+                } label: {
+                    HStack(spacing: 10) {
+                        IconBadge(symbol: "arrow.triangle.2.circlepath", color: .accentColor, size: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("照上次的填")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Color.primary)
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 8)
+                        Text("填入")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.1)))
+                    }
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.fill.opacity(0.6)))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.chip)
+                .transition(.opacity)
+                .accessibilityIdentifier("reuseLast")
+            }
+        }
+    }
+
     private var whoCard: some View {
         RecordCard("对象", trailing: {
             NavigationLink {
@@ -267,6 +401,7 @@ struct EncounterEditView: View {
                     .foregroundStyle(hint.levelUp ? Palette.gold : Color.secondary)
                     .transition(.opacity)
             }
+            reuseRow
             let hints = cycleHints
             if !hints.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -322,8 +457,24 @@ struct EncounterEditView: View {
 
     // MARK: 地点
 
+    /// 只选了一个人时，和她去过的地方（去了几次）
+    private var herPlaceCounts: [UUID: Int] {
+        guard girls.count == 1, let girl = girls.first else { return [:] }
+        var counts: [UUID: Int] = [:]
+        for e in girl.encounters {
+            if let p = e.place { counts[p.id, default: 0] += 1 }
+        }
+        return counts
+    }
+
+    /// 和她常去的排最前面，其余按最近用过的时间
     private var quickPlaces: [Place] {
-        let sorted = allPlaces.sorted { ($0.lastUsed ?? $0.createdAt) > ($1.lastUsed ?? $1.createdAt) }
+        let counts = herPlaceCounts
+        let sorted = allPlaces.sorted { a, b in
+            let ca = counts[a.id] ?? 0, cb = counts[b.id] ?? 0
+            if ca != cb { return ca > cb }
+            return (a.lastUsed ?? a.createdAt) > (b.lastUsed ?? b.createdAt)
+        }
         var list = Array(sorted.prefix(8))
         if let place, !list.contains(where: { $0.id == place.id }) {
             list.insert(place, at: 0)
@@ -366,11 +517,23 @@ struct EncounterEditView: View {
                         .lineLimit(1)
                         .transition(.opacity)
                 }
+            } else if !herPlaceCounts.isEmpty {
+                Text("和她去过的地方排在前面")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
         }
     }
 
     // MARK: 时间
+
+    /// 「1.5 小时 · 到 23:00」
+    private var durationLabel: String? {
+        guard durationMinutes > 0 else { return nil }
+        let end = date.addingTimeInterval(Double(durationMinutes) * 60)
+        return Choices.durationTitle(durationMinutes) + " · 到 " + end.formatted(.dateTime.hour().minute())
+    }
 
     private var timeCard: some View {
         RecordCard("时间") {
@@ -390,7 +553,7 @@ struct EncounterEditView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 9) {
-                FieldLabel(title: "时长", value: durationMinutes > 0 ? Choices.durationTitle(durationMinutes) : nil)
+                FieldLabel(title: "时长", value: durationLabel)
                 ScrollViewReader { proxy in
                     ScrollChips {
                         ForEach(Choices.quickDurations, id: \.self) { m in
@@ -480,9 +643,28 @@ struct EncounterEditView: View {
         girls.count == 1 ? girls.first?.details : nil
     }
 
+    /// 她档案里写的底线，记玩法的时候放在眼前
+    private var boundaryNotes: [(name: String, text: String)] {
+        girls.compactMap { g -> (name: String, text: String)? in
+            let text = g.details.boundaries.trimmed
+            return text.isEmpty ? nil : (name: g.name, text: text)
+        }
+    }
+
     private var playCard: some View {
         let liked = herPreferences
+        let limits = boundaryNotes
         return RecordCard("玩法与道具") {
+            if !limits.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(limits, id: \.name) { item in
+                        Label(girls.count == 1 ? "她的底线：\(item.text)" : "\(item.name)的底线：\(item.text)",
+                              systemImage: "hand.raised")
+                            .font(.footnote)
+                            .foregroundStyle(Palette.period)
+                    }
+                }
+            }
             VStack(spacing: 0) {
                 TagDisclosure(title: "体位", symbol: "square.grid.2x2", key: .positions, selection: $details.positions,
                               marked: Set(liked?.likedPositions ?? []))
@@ -590,15 +772,41 @@ struct EncounterEditView: View {
                     }
                 }
             }
-            Button {
-                withAnimation(.snappy) {
-                    details.expenses.append(ExpenseItem(category: config.options(.expenseCategories).first ?? "酒店"))
+            // 按类别直接加一笔，不用先加再去菜单里改类别
+            let categories = config.options(.expenseCategories)
+            if categories.isEmpty {
+                Button {
+                    withAnimation(.snappy) { details.expenses.append(ExpenseItem()) }
+                } label: {
+                    Label("添加一笔", systemImage: "plus")
+                        .font(.subheadline.weight(.medium))
                 }
-            } label: {
-                Label("添加一笔", systemImage: "plus")
-                    .font(.subheadline.weight(.medium))
+                .buttonStyle(.borderless)
+            } else {
+                ScrollChips {
+                    ForEach(categories, id: \.self) { category in
+                        Button {
+                            withAnimation(.snappy) {
+                                details.expenses.append(ExpenseItem(category: category))
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus")
+                                    .font(.caption2.weight(.semibold))
+                                Text(category)
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.08)))
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.chip)
+                        .accessibilityLabel("加一笔\(category)")
+                    }
+                }
             }
-            .buttonStyle(.borderless)
         }
     }
 

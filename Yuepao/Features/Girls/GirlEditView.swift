@@ -60,12 +60,19 @@ struct GirlEditView: View {
     @State private var avatarItem: PhotosPickerItem?
     @State private var newPhotoIDs: [String] = []
     @State private var confirmDiscard = false
+    /// 分区索引点到哪一块，就把那张卡片展开
+    @State private var reveal: [String: Int] = [:]
+    /// 别的档案里各个城市填过的常驻区域，打开时整理一次，用来给输入提示
+    @State private var knownDistricts: [String: [String]] = [:]
     @FocusState private var nameFocused: Bool
     private let originalAvatar: String?
     private let initialDraft: GirlDraft
+    /// 打开后直接跳到哪一块（从档案页某个小节点「编辑」进来时）
+    private let focus: String?
 
-    init(girl: Girl?) {
+    init(girl: Girl?, focus: String? = nil) {
         self.girl = girl
+        self.focus = focus
         let d = GirlDraft(girl)
         _draft = State(initialValue: d)
         initialDraft = d
@@ -78,24 +85,39 @@ struct GirlEditView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    identityCard
-                    basicCard
-                    metCard
-                    bodyCard
-                    socialCard
-                    contactCard
-                    haremCard
-                    circleCard
-                    preferenceCard
-                    intimacyCard
-                    customCard
-                    notesCard
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        identityCard
+                        basicCard.id("basic")
+                        metCard.id("met")
+                        bodyCard.id("body")
+                        socialCard.id("social")
+                        contactCard.id("contacts")
+                        haremCard.id("harem")
+                        circleCard.id("circle")
+                        preferenceCard.id("preference")
+                        intimacyCard.id("intimacy")
+                        customCard.id("custom")
+                        notesCard.id("notes")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 36)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-                .padding(.bottom, 36)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    FormRail(items: railItems) { id in
+                        jump(to: id, proxy: proxy)
+                    }
+                }
+                .onAppear {
+                    indexDistricts()
+                    guard let focus else { return }
+                    // 等弹窗动画结束再跳
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                        jump(to: focus, proxy: proxy)
+                    }
+                }
             }
             .background(Palette.canvas)
             .formKeyboardHandling()
@@ -136,6 +158,85 @@ struct GirlEditView: View {
             Button("放弃修改", role: .destructive) { discard() }
             Button("继续编辑", role: .cancel) {}
         }
+    }
+
+    // MARK: 分区索引
+
+    private var railItems: [FormRailItem] {
+        let d = draft.details
+        let basic = !d.realName.trimmed.isEmpty || d.birthday != nil || !d.mbti.isEmpty
+            || !d.personality.isEmpty || !d.tags.isEmpty
+        let social = !d.occupation.isEmpty || !d.education.isEmpty || !d.school.isEmpty || !d.hometown.isEmpty
+            || !d.maritalStatus.isEmpty || !d.district.isEmpty || !draft.city.trimmed.isEmpty || draft.coordinate != nil
+        let harem = d.ratingLooks > 0 || d.ratingBody > 0 || d.ratingPersonality > 0 || d.ratingSex > 0
+            || d.ratingOverall > 0 || d.awarenessLevel != .unset || d.contactGoalDays > 0
+        var items = [
+            FormRailItem(id: "basic", title: "基本", filled: basic),
+            FormRailItem(id: "met", title: "认识", filled: d.hasMetInfo),
+            FormRailItem(id: "body", title: "身材", filled: d.hasBodyInfo),
+            FormRailItem(id: "social", title: "社会", filled: social),
+            FormRailItem(id: "contacts", title: "联系", filled: d.contacts.contains { !$0.value.trimmed.isEmpty }),
+            FormRailItem(id: "harem", title: "后宫", filled: harem),
+            FormRailItem(id: "circle", title: "交集", filled: d.connections.contains { $0.girlID != nil }),
+            FormRailItem(id: "preference", title: "偏好", filled: d.hasPreferences),
+            FormRailItem(id: "intimacy", title: "亲密", filled: d.hasIntimacy)
+        ]
+        if !config.config.customFields.isEmpty {
+            items.append(FormRailItem(id: "custom", title: "自定义", filled: !d.customValues.isEmpty))
+        }
+        items.append(FormRailItem(id: "notes", title: "备注", filled: !d.notes.trimmed.isEmpty))
+        return items
+    }
+
+    /// 展开那张卡片，再滚过去
+    private func jump(to id: String, proxy: ScrollViewProxy) {
+        hideKeyboard()
+        reveal[id, default: 0] += 1
+        // 等卡片开始展开再滚，落点才准
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.snappy(duration: 0.35)) {
+                proxy.scrollTo(id, anchor: .top)
+            }
+        }
+    }
+
+    // MARK: 输入提示
+
+    /// 别的档案里填过的城市，填得多的排前面。点一下直接填，免得同一个城市写出两种写法
+    private var citySuggestions: [String] {
+        let current = draft.city.trimmed
+        var counts: [String: Int] = [:]
+        for g in allGirls where g.id != girl?.id {
+            let city = g.city.trimmed
+            if !city.isEmpty { counts[city, default: 0] += 1 }
+        }
+        let ranked = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
+        return Array(ranked.filter { Self.suggests($0, for: current) }.prefix(5))
+    }
+
+    /// 同一个城市里，别的档案填过的常驻区域
+    private var districtSuggestions: [String] {
+        let current = draft.details.district.trimmed
+        let list = knownDistricts[draft.city.trimmed] ?? []
+        return Array(list.filter { Self.suggests($0, for: current) }.prefix(5))
+    }
+
+    /// 还没输入时全部给出；输入了开头就只留对得上的，已经一样就不再提示
+    private static func suggests(_ candidate: String, for typed: String) -> Bool {
+        typed.isEmpty || (candidate != typed && candidate.hasPrefix(typed))
+    }
+
+    private func indexDistricts() {
+        var index: [String: [String]] = [:]
+        for g in allGirls where g.id != girl?.id {
+            let city = g.city.trimmed
+            let district = g.details.district.trimmed
+            guard !city.isEmpty, !district.isEmpty else { continue }
+            if !(index[city] ?? []).contains(district) {
+                index[city, default: []].append(district)
+            }
+        }
+        knownDistricts = index
     }
 
     // MARK: 头像、代号、关系、位分
@@ -259,7 +360,7 @@ struct GirlEditView: View {
 
     private var basicCard: some View {
         FoldCard("基本信息", symbol: "person.text.rectangle", summary: basicSummary,
-                 expanded: isNew, identifier: "fold-basic") {
+                 expanded: isNew, identifier: "fold-basic", reveal: reveal["basic", default: 0]) {
             CardField(title: "真名", text: $draft.details.realName, prompt: "只有你看得到，默认打码")
             Divider()
             VStack(alignment: .leading, spacing: 6) {
@@ -299,7 +400,7 @@ struct GirlEditView: View {
 
     private var metCard: some View {
         FoldCard("认识经过", symbol: "bubble.left.and.bubble.right", summary: metSummary,
-                 expanded: isNew, identifier: "fold-met") {
+                 expanded: isNew, identifier: "fold-met", reveal: reveal["met", default: 0]) {
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "认识渠道")
                 TagCloud(key: .channels, selection: $draft.details.channel.asSingleSelection)
@@ -329,7 +430,7 @@ struct GirlEditView: View {
     }
 
     private var bodyCard: some View {
-        FoldCard("身材外貌", symbol: "figure.stand", summary: bodySummary, identifier: "fold-body") {
+        FoldCard("身材外貌", symbol: "figure.stand", summary: bodySummary, identifier: "fold-body", reveal: reveal["body", default: 0]) {
             HStack(spacing: 10) {
                 NumberTile(title: "身高", value: $draft.details.height, unit: "cm")
                 NumberTile(title: "体重", value: $draft.details.weight, unit: "kg")
@@ -362,7 +463,7 @@ struct GirlEditView: View {
     }
 
     private var socialCard: some View {
-        FoldCard("社会信息", symbol: "briefcase", summary: socialSummary, identifier: "fold-social") {
+        FoldCard("社会信息", symbol: "briefcase", summary: socialSummary, identifier: "fold-social", reveal: reveal["social", default: 0]) {
             Group {
                 CardField(title: "职业 / 行业", text: $draft.details.occupation)
                 Divider()
@@ -383,8 +484,16 @@ struct GirlEditView: View {
                 }
                 Divider()
                 CardField(title: "城市", text: $draft.city)
+                let cities = citySuggestions
+                if !cities.isEmpty {
+                    SuggestionChips(items: cities) { draft.city = $0 }
+                }
                 Divider()
                 CardField(title: "常驻区域", text: $draft.details.district, prompt: "区 / 商圈")
+                let districts = districtSuggestions
+                if !districts.isEmpty {
+                    SuggestionChips(items: districts) { draft.details.district = $0 }
+                }
                 Divider()
                 locationRow
             }
@@ -435,7 +544,7 @@ struct GirlEditView: View {
         let types = draft.details.contacts.filter { !$0.value.trimmed.isEmpty }.map(\.type)
         return FoldCard("联系方式", symbol: "phone",
                         summary: types.isEmpty ? FoldCardSummary.empty : types.joined(separator: "、"),
-                        identifier: "fold-contacts") {
+                        identifier: "fold-contacts", reveal: reveal["contacts", default: 0]) {
             ForEach($draft.details.contacts) { $contact in
                 HStack(spacing: 10) {
                     Menu {
@@ -469,7 +578,7 @@ struct GirlEditView: View {
     }
 
     private var haremCard: some View {
-        FoldCard("后宫属性", symbol: "crown", summary: haremSummary, tint: Palette.gold, identifier: "fold-harem") {
+        FoldCard("后宫属性", symbol: "crown", summary: haremSummary, tint: Palette.gold, identifier: "fold-harem", reveal: reveal["harem", default: 0]) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("亲密度")
@@ -531,7 +640,7 @@ struct GirlEditView: View {
         let count = draft.details.connections.filter { $0.girlID != nil }.count
         return FoldCard("社交圈交集", symbol: "person.2",
                         summary: count == 0 ? FoldCardSummary.empty : "和 \(count) 位档案里的人认识",
-                        identifier: "fold-circle") {
+                        identifier: "fold-circle", reveal: reveal["circle", default: 0]) {
             ForEach($draft.details.connections) { $conn in
                 HStack(spacing: 10) {
                     Menu {
@@ -569,7 +678,7 @@ struct GirlEditView: View {
     }
 
     private var preferenceCard: some View {
-        FoldCard("偏好与雷区", symbol: "heart.text.square", summary: preferenceSummary, identifier: "fold-preference") {
+        FoldCard("偏好与雷区", symbol: "heart.text.square", summary: preferenceSummary, identifier: "fold-preference", reveal: reveal["preference", default: 0]) {
             Group {
                 CardField(title: "爱吃", text: $draft.details.favoriteFood, prompt: "日料、火锅…", multiline: true)
                 Divider()
@@ -598,7 +707,7 @@ struct GirlEditView: View {
     }
 
     private var intimacyCard: some View {
-        FoldCard("亲密偏好", symbol: "flame", summary: intimacySummary, identifier: "fold-intimacy") {
+        FoldCard("亲密偏好", symbol: "flame", summary: intimacySummary, identifier: "fold-intimacy", reveal: reveal["intimacy", default: 0]) {
             VStack(spacing: 0) {
                 TagDisclosure(title: "特质 / 性癖", symbol: "tag", key: .traits,
                               selection: $draft.details.traits, tint: Palette.gold)
@@ -642,7 +751,7 @@ struct GirlEditView: View {
             let filled = fields.filter { !(draft.details.customValues[$0.id.uuidString] ?? "").isEmpty }.count
             FoldCard("自定义字段", symbol: "slider.horizontal.3",
                      summary: filled == 0 ? FoldCardSummary.empty : "已填 \(filled) / \(fields.count)",
-                     identifier: "fold-custom") {
+                     identifier: "fold-custom", reveal: reveal["custom", default: 0]) {
                 ForEach(Array(fields.enumerated()), id: \.element.id) { index, field in
                     if index > 0 { Divider() }
                     CustomFieldInput(field: field, value: customBinding(field.id.uuidString))
@@ -661,7 +770,7 @@ struct GirlEditView: View {
     private var notesCard: some View {
         let notes = draft.details.notes.trimmed
         return FoldCard("备注", symbol: "note.text", summary: notes.isEmpty ? FoldCardSummary.empty : notes,
-                        identifier: "fold-notes") {
+                        identifier: "fold-notes", reveal: reveal["notes", default: 0]) {
             TextField("其他想记的", text: $draft.details.notes, axis: .vertical)
                 .lineLimit(3...12)
         }

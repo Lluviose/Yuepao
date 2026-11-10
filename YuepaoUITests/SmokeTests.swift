@@ -453,7 +453,40 @@ final class SmokeTests: XCTestCase {
                         shot(app, "c8-intimacy-edit")
                     }
                 }
+                // 顶上的分区索引：点「身材」会展开那张卡片并滚过去
+                let rail = app.buttons["rail-body"].firstMatch
+                if rail.waitForExistence(timeout: 3) && rail.isHittable {
+                    rail.tap()
+                    sleep(2)
+                    shot(app, "c12-edit-rail")
+                }
             }
+        }
+    }
+
+    /// 档案页：「更多」里是不常用的几种记录；小节标题上的笔直接打开编辑页里对应的那一块
+    func testEditInPlace() {
+        let app = makeApp(seed: true)
+        app.launch()
+        tapTab(app, "后宫")
+        let mei = app.staticTexts["小美"].firstMatch
+        XCTAssertTrue(mei.waitForExistence(timeout: 5))
+        mei.tap()
+        sleep(2)
+        let more = app.buttons["quickMore"].firstMatch
+        if more.waitForExistence(timeout: 3) && more.isHittable {
+            more.tap()
+            sleep(1)
+            shot(app, "c14-quick-more")
+            // 点菜单外面收起
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
+            sleep(1)
+        }
+        let editBody = app.buttons["编辑身材外貌"].firstMatch
+        if scrollTo(editBody, in: app, maxSwipes: 10) {
+            editBody.tap()
+            sleep(3)
+            shot(app, "c13-edit-focus")
         }
     }
 
@@ -652,6 +685,13 @@ final class SmokeTests: XCTestCase {
             pick.tap()
             sleep(1)
             shot(app, "f7-dark-form")
+            // 照上次的填：地点和玩法一下填好，顶上的索引跟着亮起来
+            let reuse = app.buttons["reuseLast"].firstMatch
+            if reuse.waitForExistence(timeout: 3) && reuse.isHittable {
+                reuse.tap()
+                sleep(1)
+                shot(app, "f8-dark-reuse")
+            }
         }
     }
 
