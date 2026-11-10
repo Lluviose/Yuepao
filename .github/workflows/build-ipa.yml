@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 40
     permissions:
       contents: write
@@ -83,7 +83,7 @@ jobs:
 
   ui-test:
     # 在模拟器里跑一遍冒烟测试并截图，确认 App 能正常启动和使用
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 40
     permissions:
       contents: write
