@@ -82,13 +82,39 @@ jobs:
           files: dist/Yuepao.ipa
 
   ui-test:
-    # 在模拟器里跑一遍冒烟测试并截图，确认 App 能正常启动和使用
-    runs-on: macos-26-intel
-    timeout-minutes: 40
+    # ARM 模拟器分组执行，避免完整界面巡检挤占隐私回归的时间。
+    runs-on: macos-26
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: flows
+            tests: |
+              YuepaoUITests/SmokeTests/testAddTodoFromAgenda
+              YuepaoUITests/SmokeTests/testBrowseDemoData
+              YuepaoUITests/SmokeTests/testEditInPlace
+              YuepaoUITests/SmokeTests/testLockScreen
+          - group: media
+            tests: |
+              YuepaoUITests/SmokeTests/testCreateProfileAndEncounter
+              YuepaoUITests/SmokeTests/testIntimacyProfile
+              YuepaoUITests/SmokeTests/testMapModule
+              YuepaoUITests/SmokeTests/testMediaGallery
+          - group: privacy
+            tests: |
+              YuepaoTests
+              YuepaoUITests/SmokeTests/testDarkMode
+              YuepaoUITests/SmokeTests/testPrivacyLockCoversEditorSheet
+              YuepaoUITests/SmokeTests/testPrivacyLockCoversFullScreenMedia
+              YuepaoUITests/SmokeTests/testPrivacyLockPreservesTodoDraft
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v5
+
+      - name: Xcode version
+        run: xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -100,19 +126,32 @@ jobs:
         id: sim
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
+          import json, re, sys
           devices = json.load(sys.stdin)["devices"]
           found = [(rt, d) for rt, ds in devices.items() if "iOS" in rt for d in ds if d["name"].startswith("iPhone")]
-          found.sort(key=lambda t: (t[0], "Pro" in t[1]["name"]))
+          found.sort(key=lambda t: (tuple(map(int, re.findall(r"\d+", t[0]))), "Pro" in t[1]["name"]))
           print(found[-1][1]["udid"])
           print(found[-1][0], found[-1][1]["name"], file=sys.stderr)
           ')
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
-      - name: Run unit and UI tests
+      - name: Boot simulator
+        timeout-minutes: 8
+        run: |
+          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
+
+      - name: Run tests (${{ matrix.group }})
+        timeout-minutes: 35
+        env:
+          TEST_SELECTORS: ${{ matrix.tests }}
         run: |
           set -o pipefail
           mkdir -p screenshots
+          test_args=()
+          while IFS= read -r selector; do
+            [ -z "$selector" ] || test_args+=("-only-testing:$selector")
+          done <<< "$TEST_SELECTORS"
+          test "${#test_args[@]}" -gt 0
           TEST_RUNNER_SCREENSHOT_DIR="$PWD/screenshots" xcodebuild test \
             -project Yuepao.xcodeproj \
             -scheme Yuepao \
@@ -120,35 +159,20 @@ jobs:
             -parallel-testing-enabled NO \
             -derivedDataPath build-sim \
             -resultBundlePath TestResults.xcresult \
-            -quiet 2>&1 | tee test.log
+            "${test_args[@]}" 2>&1 | tee test.log
 
       - name: Test summary
         if: always()
         run: |
           xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json 2>/dev/null \
+            | tee test-summary.json \
             | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({k: d.get(k) for k in ("result","passedTests","failedTests","testFailures")}, ensure_ascii=False, indent=1))' || true
-
-      - name: Commit screenshots
-        if: always() && github.event_name == 'workflow_dispatch' && inputs.commit_screenshots
-        run: |
-          mkdir -p docs/screenshots
-          rm -f docs/screenshots/*.jpg
-          for f in screenshots/*.png; do
-            [ -e "$f" ] || continue
-            n=$(basename "$f" .png)
-            sips -Z 900 -s format jpeg -s formatOptions 70 "$f" --out "docs/screenshots/$n.jpg" >/dev/null
-          done
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/screenshots
-          git commit -m "Update UI screenshots" || exit 0
-          git push
 
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: screenshots-${{ github.run_number }}
+          name: screenshots-${{ github.run_number }}-${{ matrix.group }}
           path: screenshots/
           retention-days: 14
 
@@ -156,8 +180,43 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: test-results-${{ github.run_number }}
+          name: test-results-${{ github.run_number }}-${{ matrix.group }}
           path: |
             test.log
+            test-summary.json
             TestResults.xcresult
           retention-days: 14
+
+  commit-screenshots:
+    needs: ui-test
+    if: github.event_name == 'workflow_dispatch' && inputs.commit_screenshots
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: screenshots-${{ github.run_number }}-*
+          path: screenshots
+          merge-multiple: true
+      - name: Commit complete screenshots
+        run: |
+          # 仅在全部测试组成功后转换、提交，转换失败时保留原文档截图。
+          mkdir -p converted-screenshots
+          for f in screenshots/*.png; do
+            [ -e "$f" ] || continue
+            n=$(basename "$f" .png)
+            sips -Z 900 -s format jpeg -s formatOptions 70 "$f" --out "converted-screenshots/$n.jpg" >/dev/null
+          done
+          test -n "$(find converted-screenshots -name '*.jpg' -print -quit)"
+          mkdir -p docs/screenshots
+          rm -f docs/screenshots/*.jpg
+          cp converted-screenshots/*.jpg docs/screenshots/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git diff --cached --quiet && exit 0
+          git commit -m "Update UI screenshots"
+          git push
