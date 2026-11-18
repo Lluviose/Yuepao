@@ -4,6 +4,7 @@ import SwiftUI
 
 /// 可选中的胶囊
 struct ChoiceChip: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     var symbol: String?
     let selected: Bool
@@ -11,7 +12,7 @@ struct ChoiceChip: View {
 
     var body: some View {
         Button {
-            withAnimation(.snappy(duration: 0.22)) { action() }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) { action() }
         } label: {
             HStack(spacing: 5) {
                 if let symbol {
@@ -36,6 +37,7 @@ struct ChoiceChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.chip)
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .sensoryFeedback(.selection, trigger: selected)
     }
 }

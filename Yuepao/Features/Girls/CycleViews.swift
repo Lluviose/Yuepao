@@ -170,7 +170,7 @@ struct GirlCycleView: View {
                     case .none: break
                     }
                     if encounterDays.contains(Calendar.current.startOfDay(for: day)) {
-                        dec.dots.append(Palette.encounter)
+                        dec.dots.append(.encounter)
                     }
                     return dec
                 }

@@ -3,6 +3,7 @@ import SwiftData
 
 /// 「成就」标签页：等级、每周目标、下一个目标、收藏入口、统计入口
 struct HubView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @ObservedObject private var center = AchievementCenter.shared
     @Environment(\.modelContext) private var context
     @Query private var encounters: [Encounter]
@@ -23,7 +24,7 @@ struct HubView: View {
                     } label: {
                         LevelCard(level: center.level, unlocked: center.unlocked.count, total: center.results.count)
                     }
-                    .buttonStyle(PressableStyle())
+                    .buttonStyle(ChipPressStyle(scale: 0.98))
                     .accessibilityIdentifier("levelCard")
 
                     WeeklyGoalCard(progress: center.weekly) { goal in
@@ -165,13 +166,14 @@ struct HubView: View {
     }
 
     private var collectionsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12),
+                                 count: typeSize.isAccessibilitySize ? 1 : 2), spacing: 12) {
             NavigationLink {
                 CodexView()
             } label: {
                 CollectionTile(symbol: "square.grid.3x3", title: "图鉴", value: codexSummary, caption: "体位 · 玩法 · 道具 · 星座")
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(ChipPressStyle(scale: 0.98))
             .accessibilityIdentifier("codexCard")
 
             NavigationLink {
@@ -179,7 +181,7 @@ struct HubView: View {
             } label: {
                 CollectionTile(symbol: "seal", title: "城市印章", value: "\(cityCount)", caption: "去过的城市")
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(ChipPressStyle(scale: 0.98))
             .accessibilityIdentifier("stampsCard")
 
             NavigationLink {
@@ -188,7 +190,7 @@ struct HubView: View {
                 CollectionTile(symbol: "star", title: "心愿清单",
                                value: "\(wishes.filter(\.isDone).count) / \(wishes.count)", caption: "已实现")
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(ChipPressStyle(scale: 0.98))
             .accessibilityIdentifier("wishCard")
 
             Button {
@@ -197,7 +199,7 @@ struct HubView: View {
                 CollectionTile(symbol: "sparkles.rectangle.stack", title: "年度回顾",
                                value: "\(Calendar.current.component(.year, from: Date()))", caption: "这一年的故事")
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(ChipPressStyle(scale: 0.98))
             .accessibilityIdentifier("reviewCard")
         }
     }
@@ -239,15 +241,6 @@ struct HubView: View {
 }
 
 // MARK: - 组件
-
-/// 点按时轻微缩小
-struct PressableStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
-    }
-}
 
 struct HubCard<Content: View>: View {
     let title: String
@@ -336,18 +329,22 @@ struct DataRow: View {
 
 /// 每周目标：进度环 + 连续周数
 struct WeeklyGoalCard: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let progress: WeeklyProgress
     let onChangeGoal: (Int) -> Void
 
     @State private var animated = false
 
     var body: some View {
-        HStack(spacing: 18) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                                                  : AnyLayout(HStackLayout(spacing: 18))
+        layout {
             ZStack {
                 Circle()
                     .stroke(Color.secondary.opacity(0.14), lineWidth: 9)
                 Circle()
-                    .trim(from: 0, to: animated ? progress.progress : 0)
+                    .trim(from: 0, to: animated || reduceMotion ? progress.progress : 0)
                     .stroke(
                         AngularGradient(colors: [Palette.gold.opacity(0.7), Palette.gold, Color.accentColor.opacity(0.9)],
                                         center: .center),
@@ -363,6 +360,10 @@ struct WeeklyGoalCard: View {
                 }
             }
             .frame(width: 86, height: 86)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("本周完成")
+            .accessibilityValue("\(progress.thisWeek) 次，目标 \(progress.goal) 次")
+            .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: progress.progress)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -378,7 +379,9 @@ struct WeeklyGoalCard: View {
                         Image(systemName: "slider.horizontal.3")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel("调整每周目标")
                 }
                 Text(message)
                     .font(.subheadline)
@@ -399,7 +402,7 @@ struct WeeklyGoalCard: View {
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .fill(Palette.surface))
         .onAppear {
-            withAnimation(.smooth(duration: 1.0).delay(0.2)) { animated = true }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.55)) { animated = true }
         }
     }
 

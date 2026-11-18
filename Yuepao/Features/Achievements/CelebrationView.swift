@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 解锁成就时的庆祝：奖章翻转入场 + 扫光 + 一圈金色微粒
 struct CelebrationView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let result: AchievementResult
     let onDismiss: () -> Void
 
@@ -28,7 +29,7 @@ struct CelebrationView: View {
                         .frame(width: 280, height: 280)
                         .scaleEffect(appear ? 1 : 0.3)
                         .opacity(appear ? 1 : 0)
-                    ForEach(0..<14, id: \.self) { i in
+                    ForEach(0..<(reduceMotion ? 0 : 14), id: \.self) { i in
                         Circle()
                             .fill(Palette.gold)
                             .frame(width: i % 3 == 0 ? 5 : 3, height: i % 3 == 0 ? 5 : 3)
@@ -90,8 +91,10 @@ struct CelebrationView: View {
         }
         .onAppear {
             Haptics.success()
-            withAnimation(.spring(duration: 0.8, bounce: 0.32)) { appear = true }
-            withAnimation(.easeOut(duration: 1.1).delay(0.25)) { burst = true }
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.8, bounce: 0.32)) { appear = true }
+            if !reduceMotion {
+                withAnimation(.easeOut(duration: 1.1).delay(0.25)) { burst = true }
+            }
         }
     }
 }

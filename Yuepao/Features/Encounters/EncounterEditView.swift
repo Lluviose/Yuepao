@@ -3,6 +3,7 @@ import SwiftData
 
 /// 记一次 / 编辑记录：一页卡片，常用的直接点选，长列表折叠成一行、点开原地多选
 struct EncounterEditView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let encounter: Encounter?
 
     @Environment(\.dismiss) private var dismiss
@@ -239,7 +240,7 @@ struct EncounterEditView: View {
 
     private func jump(to id: String, proxy: ScrollViewProxy) {
         hideKeyboard()
-        withAnimation(.snappy(duration: 0.35)) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.35)) {
             proxy.scrollTo(id, anchor: .top)
         }
         withAnimation(.easeOut(duration: 0.25)) { flashing = id }

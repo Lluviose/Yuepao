@@ -51,20 +51,19 @@ struct EncounterListView: View {
 
     var body: some View {
         NavigationStack {
+            let months = groups
             List {
                 let list = people
                 if list.count >= 2 {
                     Section {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
-                                PersonFilterChip(girl: nil, count: encounters.count, selected: girlFilter == nil,
-                                                 dimmed: false) {
+                                PersonFilterChip(girl: nil, count: encounters.count, selected: girlFilter == nil) {
                                     withAnimation(.snappy) { girlFilter = nil }
                                 }
                                 ForEach(list, id: \.girl.id) { item in
                                     let on = girlFilter == item.girl.id
-                                    PersonFilterChip(girl: item.girl, count: item.count, selected: on,
-                                                     dimmed: girlFilter != nil && !on) {
+                                    PersonFilterChip(girl: item.girl, count: item.count, selected: on) {
                                         withAnimation(.snappy) { girlFilter = on ? nil : item.girl.id }
                                     }
                                 }
@@ -77,7 +76,15 @@ struct EncounterListView: View {
                         .sensoryFeedback(.selection, trigger: girlFilter)
                     }
                 }
-                ForEach(groups, id: \.month) { group in
+                if !encounters.isEmpty && months.isEmpty {
+                    Section {
+                        FilterEmptyState(title: "没有匹配的记录", actionTitle: "显示全部记录") {
+                            search = ""
+                            girlFilter = nil
+                        }
+                    }
+                }
+                ForEach(months, id: \.month) { group in
                     Section {
                         ForEach(group.items) { e in
                             NavigationLink {
@@ -133,8 +140,6 @@ struct EncounterListView: View {
                     EmptyState(symbol: "heart.text.square", title: "还没有记录",
                                message: "每次约会记一笔，时间、地点和感受都留得住",
                                actionTitle: "记一次", action: { creating = true })
-                } else if filtered.isEmpty {
-                    ContentUnavailableView.search
                 }
             }
             .searchable(text: $search, prompt: "人、地点、备注…")
@@ -171,21 +176,25 @@ struct EncounterListView: View {
 }
 
 struct EncounterRow: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let encounter: Encounter
     var showGirls: Bool = true
     var showPlace: Bool = true
 
     var body: some View {
         let d = encounter.details
-        HStack(spacing: 14) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                                                  : AnyLayout(HStackLayout(spacing: 12))
+        layout {
             DateChip(date: encounter.date)
             VStack(alignment: .leading, spacing: 4) {
                 if showGirls {
                     HStack(spacing: 6) {
                         stackedAvatars
                         Text(encounter.girlNames)
-                            .font(Typo.display(17))
-                            .lineLimit(1)
+                            .font(.headline)
+                            .fontDesign(.serif)
+                            .lineLimit(2)
                     }
                 }
                 HStack(spacing: 6) {
@@ -210,8 +219,8 @@ struct EncounterRow: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 5) {
+            if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
+            VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: 5) {
                 HStack(spacing: 5) {
                     if encounter.stiRisk || encounter.pregnancyRisk {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -261,7 +270,6 @@ struct PersonFilterChip: View {
     let girl: Girl?
     let count: Int
     let selected: Bool
-    let dimmed: Bool
     let action: () -> Void
 
     var body: some View {
@@ -291,7 +299,7 @@ struct PersonFilterChip: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 18, minHeight: 18)
-                        .background(Capsule().fill(selected ? Palette.wineTop : Color.secondary.opacity(0.6)))
+                        .background(Capsule().fill(selected ? Palette.wineTop : Palette.memo))
                         .overlay(Capsule().stroke(Palette.canvas, lineWidth: 2))
                         .offset(x: 6, y: -4)
                 }
@@ -301,12 +309,11 @@ struct PersonFilterChip: View {
                     .lineLimit(1)
                     .frame(width: 54)
             }
-            .opacity(dimmed ? 0.45 : 1)
-            .scaleEffect(dimmed ? 0.94 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.chip)
         .accessibilityLabel(girl.map { "只看\($0.name)" } ?? "全部记录")
+        .accessibilityValue("\(count) 次")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier(girl.map { "filter-\($0.name)" } ?? "filter-all")
     }

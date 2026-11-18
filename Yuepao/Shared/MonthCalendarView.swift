@@ -6,13 +6,43 @@ struct DayDecoration {
         case period, predictedPeriod, fertile
     }
 
-    var dots: [Color] = []
+    enum Marker: String {
+        case encounter = "约会"
+        case todo = "待办"
+        case date = "纪念日或生日"
+        case period = "经期"
+
+        var color: Color {
+            switch self {
+            case .encounter: return Palette.encounter
+            case .todo: return Palette.todo
+            case .date: return Palette.date
+            case .period: return Palette.period
+            }
+        }
+    }
+
+    var dots: [Marker] = []
     var band: Band?
     var ovulation = false
+
+    func spokenSummary(isToday: Bool) -> String {
+        var parts = isToday ? ["今天"] : []
+        switch band {
+        case .period: parts.append("经期")
+        case .predictedPeriod: parts.append("预计经期")
+        case .fertile: parts.append("易孕期")
+        case nil: break
+        }
+        if ovulation { parts.append("预计排卵日") }
+        parts.append(contentsOf: dots.map(\.rawValue))
+        return parts.joined(separator: "，")
+    }
 }
 
 /// 月历：左右滑动切换月份，选中态平滑移动
 struct MonthCalendarView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var month: Date
     @Binding var selection: Date
     let decoration: (Date) -> DayDecoration
@@ -70,34 +100,43 @@ struct MonthCalendarView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 2) {
             Text(Fmt.month(month))
-                .font(Typo.display(20))
+                .font(.title3.weight(.semibold))
+                .fontDesign(.serif)
                 .contentTransition(.numericText())
             Spacer()
             if !cal.isDate(month, equalTo: Date(), toGranularity: .month) || !cal.isDateInToday(selection) {
                 Button("今天") {
                     let today = cal.startOfDay(for: Date())
                     forward = today > month
-                    withAnimation(.snappy) {
+                    withAnimation(reduceMotion ? nil : .snappy) {
                         month = startOfMonth(today)
                         selection = today
                     }
                 }
                 .font(.subheadline.weight(.medium))
+                .frame(minWidth: 44, minHeight: 44)
                 .buttonStyle(.borderless)
                 .transition(.opacity.combined(with: .scale))
             }
-            Button { shift(-1) } label: {
-                Image(systemName: "chevron.left").font(.body.weight(.semibold))
-            }
-            .buttonStyle(.borderless)
-            Button { shift(1) } label: {
-                Image(systemName: "chevron.right").font(.body.weight(.semibold))
-            }
-            .buttonStyle(.borderless)
+            monthButton(-1, symbol: "chevron.left", label: "上个月")
+            monthButton(1, symbol: "chevron.right", label: "下个月")
         }
         .padding(.horizontal, 4)
+    }
+
+    private func monthButton(_ delta: Int, symbol: String, label: String) -> some View {
+        Button { shift(delta) } label: {
+            Image(systemName: symbol)
+                .font(.footnote.weight(.semibold))
+                .frame(width: 30, height: 30)
+                .background(Palette.fill, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.chip)
+        .accessibilityLabel(label)
     }
 
     private var weekdayRow: some View {
@@ -116,16 +155,18 @@ struct MonthCalendarView: View {
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, date in
                 if let date {
-                    DayCell(
-                        date: date,
-                        isSelected: cal.isDate(date, inSameDayAs: selection),
-                        isToday: cal.isDateInToday(date),
-                        decoration: decoration(date),
-                        namespace: namespace
-                    )
-                    .onTapGesture {
-                        withAnimation(.snappy(duration: 0.28)) { selection = date }
+                    let selected = cal.isDate(date, inSameDayAs: selection)
+                    let detail = decoration(date)
+                    Button {
+                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = date }
+                    } label: {
+                        DayCell(date: date, isSelected: selected, isToday: cal.isDateInToday(date),
+                                decoration: detail, namespace: namespace)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(date.formatted(.dateTime.month().day().weekday().locale(Fmt.locale)))
+                    .accessibilityValue(detail.spokenSummary(isToday: cal.isDateInToday(date)))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 } else {
                     Color.clear.frame(height: 46)
                 }
@@ -137,7 +178,7 @@ struct MonthCalendarView: View {
     private func shift(_ delta: Int) {
         guard let next = cal.date(byAdding: .month, value: delta, to: startOfMonth(month)) else { return }
         forward = delta > 0
-        withAnimation(.snappy(duration: 0.32)) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.32)) {
             month = next
             if !cal.isDate(selection, equalTo: next, toGranularity: .month) {
                 selection = cal.isDate(next, equalTo: Date(), toGranularity: .month) ? cal.startOfDay(for: Date()) : next
@@ -176,8 +217,8 @@ private struct DayCell: View {
             .frame(width: 34, height: 34)
 
             HStack(spacing: 3) {
-                ForEach(Array(decoration.dots.prefix(4).enumerated()), id: \.offset) { _, color in
-                    Circle().fill(color).frame(width: 5, height: 5)
+                ForEach(Array(decoration.dots.prefix(4).enumerated()), id: \.offset) { _, marker in
+                    Circle().fill(marker.color).frame(width: 5, height: 5)
                 }
             }
             .frame(height: 5)

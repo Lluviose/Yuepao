@@ -11,6 +11,7 @@ struct FormRailItem: Identifiable, Equatable {
 /// 固定在导航栏下面的一排小胶囊：点一下滚到那一块。
 /// 填过的带实心点，没填的是空心圈，表单再长也能一眼看出记到哪了
 struct FormRail: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let items: [FormRailItem]
     let onSelect: (String) -> Void
 
@@ -26,21 +27,21 @@ struct FormRail: View {
                         onSelect(item.id)
                     } label: {
                         HStack(spacing: 5) {
-                            // 填上的那一刻，小点从空心圈长成实心
-                            Circle()
-                                .fill(item.filled ? Color.accentColor : Color.clear)
-                                .overlay(Circle().strokeBorder(Color.secondary.opacity(item.filled ? 0 : 0.5), lineWidth: 1))
-                                .frame(width: 6, height: 6)
-                                .scaleEffect(item.filled ? 1.15 : 0.9)
+                            Image(systemName: item.filled ? "checkmark.circle.fill" : "circle")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(item.filled ? Color.accentColor : Color.secondary)
+                                .contentTransition(.opacity)
+                                .accessibilityHidden(true)
                             Text(item.title)
                         }
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(item.filled ? Color.primary : Color.secondary)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 7)
-                        .background(Capsule().fill(Palette.surface))
+                        .background(Capsule().fill(item.filled ? Color.accentColor.opacity(0.08) : Palette.surface))
                         .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 0.5))
-                        .contentShape(Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.chip)
                     .accessibilityLabel(item.filled ? "\(item.title)，已填" : "\(item.title)，还没填")
@@ -48,9 +49,8 @@ struct FormRail: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .padding(.bottom, 9)
-            .animation(.snappy(duration: 0.25), value: items)
+            .padding(.vertical, 2)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: items)
         }
         // 底色一直铺到导航栏后面，表单内容从这条下面滚过去时不会露出来
         .background(Palette.canvas, ignoresSafeAreaEdges: .top)

@@ -67,9 +67,9 @@ struct AgendaModel {
     func decoration(_ day: Date) -> DayDecoration {
         let key = Self.cal.startOfDay(for: day)
         var dec = DayDecoration()
-        if encountersByDay[key] != nil { dec.dots.append(Palette.encounter) }
-        if let todos = todosByDay[key], todos.contains(where: { !$0.isDone }) { dec.dots.append(Palette.todo) }
-        if !yearlyEvents(on: key).isEmpty { dec.dots.append(Palette.date) }
+        if encountersByDay[key] != nil { dec.dots.append(.encounter) }
+        if let todos = todosByDay[key], todos.contains(where: { !$0.isDone }) { dec.dots.append(.todo) }
+        if !yearlyEvents(on: key).isEmpty { dec.dots.append(.date) }
 
         if focusGirl != nil, let info = cycles.first?.info {
             switch info.kind(on: key) {
@@ -81,7 +81,7 @@ struct AgendaModel {
             case .none: break
             }
         } else if cycles.contains(where: { $0.info.kind(on: key).isPeriod }) {
-            dec.dots.append(Palette.period)
+            dec.dots.append(.period)
         }
         return dec
     }

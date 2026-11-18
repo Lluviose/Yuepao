@@ -102,6 +102,7 @@ final class GirlEditSession: ObservableObject, Identifiable {
 
 /// 新建 / 编辑档案：顶部是头像、代号、关系和位分，其余资料按类别折叠成卡片，收起时显示已填的摘要
 struct GirlEditView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var session: GirlEditSession
 
     @Environment(\.dismiss) private var dismiss
@@ -185,7 +186,7 @@ struct GirlEditView: View {
                        let id = await Task.detached(priority: .userInitiated, operation: {
                            try? MediaStore.shared.importAvatar(data: data)
                        }).value {
-                        withAnimation(.snappy(duration: 0.35)) { session.useImportedAvatar(id) }
+                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.35)) { session.useImportedAvatar(id) }
                     }
                     avatarItem = nil
                 }
@@ -241,7 +242,7 @@ struct GirlEditView: View {
         reveal[id, default: 0] += 1
         // 等卡片开始展开再滚，落点才准
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            withAnimation(.snappy(duration: 0.35)) {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.35)) {
                 proxy.scrollTo(id, anchor: .top)
             }
         }

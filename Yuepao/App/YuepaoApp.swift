@@ -64,6 +64,7 @@ struct RootView: View {
 
 /// 成就和锁的变化只刷新这一层，不重算承载编辑弹窗的主内容。
 private struct CelebrationLayer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var lock = AppLock.shared
     @ObservedObject private var achievements = AchievementCenter.shared
 
@@ -74,7 +75,7 @@ private struct CelebrationLayer: View {
                     achievements.dismissCelebration()
                 }
                 .id(current.id)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
             }
         }
     }

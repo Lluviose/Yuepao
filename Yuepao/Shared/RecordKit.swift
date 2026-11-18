@@ -240,6 +240,7 @@ struct TagCloud: View {
 
 /// 可折叠的一行：收起时显示已选的内容，点开在原地多选
 struct TagDisclosure: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let symbol: String
     let key: OptionKey
@@ -254,7 +255,7 @@ struct TagDisclosure: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.snappy(duration: 0.32)) { expanded.toggle() }
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.32)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
                     IconBadge(symbol: symbol, color: tint, size: 32)

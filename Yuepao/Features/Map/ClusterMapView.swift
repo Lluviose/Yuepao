@@ -366,7 +366,7 @@ struct ClusterMapView: UIViewRepresentable {
                 related = []
             }
 
-            UIView.animate(withDuration: focusChanged ? 0.3 : 0) {
+            UIView.animate(withDuration: focusChanged && allowsCameraMotion ? 0.3 : 0) {
                 for view in self.markerViews.allObjects {
                     guard let annotation = view.annotation else { continue }
                     view.alpha = self.isRelated(annotation) ? 1 : 0.3
@@ -378,7 +378,7 @@ struct ClusterMapView: UIViewRepresentable {
             if !arcs.isEmpty { map.addOverlays(arcs, level: .aboveRoads) }
 
             if parent.focus == nil {
-                for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) }
+                for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: allowsCameraMotion) }
             }
         }
 
@@ -418,6 +418,8 @@ struct ClusterMapView: UIViewRepresentable {
             return UIEdgeInsets(top: safe.top + parent.chrome.top, left: 0, bottom: safe.bottom + bottom, right: 0)
         }
 
+        private var allowsCameraMotion: Bool { !UIAccessibility.isReduceMotionEnabled }
+
         func fitAll(animated: Bool) {
             guard let map else { return }
             let coords = people.values.map(\.coordinate) + spots.values.map(\.coordinate)
@@ -427,7 +429,7 @@ struct ClusterMapView: UIViewRepresentable {
 
         func fly(to coordinates: [CLLocationCoordinate2D]) {
             guard let map else { return }
-            fit(map, to: coordinates, animated: true)
+            fit(map, to: coordinates, animated: allowsCameraMotion)
         }
 
         private func fit(_ map: MKMapView, to coordinates: [CLLocationCoordinate2D], animated: Bool) {
@@ -445,7 +447,7 @@ struct ClusterMapView: UIViewRepresentable {
             let insets = visibleInsets(map)
             // 头像标记在坐标上方、地点胶囊在下方，上下都留一点
             let padding = UIEdgeInsets(top: insets.top + 72, left: 48, bottom: insets.bottom + 40, right: 48)
-            map.setVisibleMapRect(rect, edgePadding: padding, animated: animated)
+            map.setVisibleMapRect(rect, edgePadding: padding, animated: animated && allowsCameraMotion)
         }
 
         func locateMe() {
@@ -459,7 +461,7 @@ struct ClusterMapView: UIViewRepresentable {
             let p = MKMapPoint(location.coordinate)
             map.setVisibleMapRect(MKMapRect(x: p.x - side / 2, y: p.y - side / 2, width: side, height: side),
                                   edgePadding: UIEdgeInsets(top: insets.top + 20, left: 30, bottom: insets.bottom + 20, right: 30),
-                                  animated: true)
+                                  animated: allowsCameraMotion)
         }
 
         /// 把坐标移到可见区域正中，保持缩放
@@ -469,7 +471,7 @@ struct ClusterMapView: UIViewRepresentable {
             let desired = CGPoint(x: map.bounds.midX,
                                   y: insets.top + (map.bounds.height - insets.top - insets.bottom) / 2 + 20)
             let target = CGPoint(x: map.bounds.midX + p.x - desired.x, y: map.bounds.midY + p.y - desired.y)
-            map.setCenter(map.convert(target, toCoordinateFrom: map), animated: true)
+            map.setCenter(map.convert(target, toCoordinateFrom: map), animated: allowsCameraMotion)
         }
 
         /// 点中的标记如果被底部卡片挡住，就挪上来
@@ -492,10 +494,10 @@ struct ClusterMapView: UIViewRepresentable {
                 let side = meters * MKMapPointsPerMeterAtLatitude(coordinate.latitude)
                 let p = MKMapPoint(coordinate)
                 let insets = visibleInsets(map, focusing: true)
+                pendingSelect = annotation
                 map.setVisibleMapRect(MKMapRect(x: p.x - side / 2, y: p.y - side / 2, width: side, height: side),
                                       edgePadding: UIEdgeInsets(top: insets.top + 40, left: 30, bottom: insets.bottom + 10, right: 30),
-                                      animated: true)
-                pendingSelect = annotation
+                                      animated: allowsCameraMotion)
             } else {
                 center(coordinate, in: map)
                 select(annotation, in: map)
@@ -504,7 +506,7 @@ struct ClusterMapView: UIViewRepresentable {
 
         private func select(_ annotation: MKAnnotation, in map: MKMapView) {
             if map.selectedAnnotations.contains(where: { $0 === annotation }) { return }
-            map.selectAnnotation(annotation, animated: true)
+            map.selectAnnotation(annotation, animated: allowsCameraMotion)
         }
 
         private func annotation(for focus: MapFocus) -> MKAnnotation? {
@@ -581,7 +583,7 @@ struct ClusterMapView: UIViewRepresentable {
                 let members = group.members
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 if spread(of: members) > 40 && mapView.region.span.latitudeDelta > 0.004 {
-                    fit(mapView, to: members.map { $0.coordinate }, animated: true)
+                    fit(mapView, to: members.map { $0.coordinate }, animated: allowsCameraMotion)
                 } else {
                     // 同一个位置放大也分不开：直接在底部卡片里一个个看
                     let focuses = members.compactMap { focus(of: $0) }

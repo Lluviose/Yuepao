@@ -6,6 +6,7 @@ import SwiftUI
 
 /// 收起时只显示标题和摘要，点开在原地展开内容
 struct FoldCard<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let symbol: String
     let summary: String
@@ -35,7 +36,7 @@ struct FoldCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.snappy(duration: 0.34)) { expanded.toggle() }
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.34)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
                     IconBadge(symbol: symbol, color: tint, size: 34)
@@ -61,6 +62,7 @@ struct FoldCard<Content: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(expanded ? "已展开" : "已折叠")
             .accessibilityIdentifier(identifier ?? "fold-\(title)")
 
             if expanded {
@@ -79,7 +81,7 @@ struct FoldCard<Content: View>: View {
             .strokeBorder(tint.opacity(flash ? 0.55 : 0), lineWidth: 1.5)
             .allowsHitTesting(false))
         .onChange(of: reveal) { _, _ in
-            withAnimation(.snappy(duration: 0.34)) { expanded = true }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.34)) { expanded = true }
             withAnimation(.easeOut(duration: 0.25)) { flash = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                 withAnimation(.easeOut(duration: 0.6)) { flash = false }

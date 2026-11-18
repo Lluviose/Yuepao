@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 金属奖章：铜 / 银 / 金 / 黑金。没解锁时是压印的灰色，外圈显示进度。
 struct MedalView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let symbol: String
     let tier: AchievementTier
     var unlocked: Bool
@@ -49,8 +50,8 @@ struct MedalView: View {
             }
         }
         .frame(width: size, height: size)
-        .onAppear {
-            guard shine else { return }
+        .onChange(of: shine && !reduceMotion, initial: true) { _, enabled in
+            guard enabled else { return }
             sweep = -1.2
             withAnimation(.easeInOut(duration: 1.4).delay(0.35)) { sweep = 1.2 }
         }
@@ -85,7 +86,7 @@ struct MedalView: View {
                 .padding(size * 0.04)
                 .blendMode(.softLight)
             // 扫光
-            if shine {
+            if shine && !reduceMotion {
                 LinearGradient(colors: [.clear, .white.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
                     .frame(width: size * 0.35)
                     .rotationEffect(.degrees(25))

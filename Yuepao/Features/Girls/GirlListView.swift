@@ -59,14 +59,25 @@ struct GirlListView: View {
 
     var body: some View {
         NavigationStack {
+            let matches = filtered
             List {
                 if !girls.isEmpty {
                     Section {
                         summary
                     }
                 }
+                if !girls.isEmpty && matches.isEmpty {
+                    Section {
+                        FilterEmptyState(title: "没有匹配的档案", actionTitle: "显示全部档案") {
+                            search = ""
+                            statusFilter = nil
+                            rankFilter = nil
+                            hideEnded = false
+                        }
+                    }
+                }
                 Section {
-                    ForEach(filtered) { girl in
+                    ForEach(matches) { girl in
                         NavigationLink {
                             GirlDetailView(girl: girl)
                                 .zoomDestination(id: girl.id, in: zoom)
@@ -102,8 +113,6 @@ struct GirlListView: View {
                     EmptyState(symbol: "person.crop.circle.badge.plus", title: "还没有档案",
                                message: "建一份档案，把她的样子、喜好和你们的故事记下来",
                                actionTitle: "新建档案", action: { editSession = GirlEditSession(girl: nil) })
-                } else if filtered.isEmpty {
-                    ContentUnavailableView.search
                 }
             }
             .searchable(text: $search, prompt: "代号、城市、标签…")
@@ -163,7 +172,10 @@ struct GirlListView: View {
             SummaryDivider()
             SummaryCell(value: "\(girls.count)", label: "全部档案", tint: Color.secondary)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
+        .background(LinearGradient(colors: [Color.accentColor.opacity(0.10), Palette.surface],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing))
+        .listRowInsets(EdgeInsets())
     }
 
     private var filterMenu: some View {
@@ -238,8 +250,11 @@ struct GirlRow: View {
         HStack(spacing: 12) {
             AvatarView(photoID: girl.avatarID, name: girl.name, size: 50, ring: girl.status.color)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(girl.name).font(Typo.display(17))
+                Text(girl.name)
+                    .font(.headline.weight(.semibold))
+                    .fontDesign(.serif)
+                    .lineLimit(2)
+                FlowLayout(spacing: 4) {
                     if !girl.rank.isEmpty { Badge(text: girl.rank) }
                     Badge(text: girl.status.title, color: girl.status.color)
                     ForEach(indicators(d), id: \.symbol) { item in
@@ -262,7 +277,7 @@ struct GirlRow: View {
                 Text("次").font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 5)
     }
 
     /// 名字旁边的小图标：生日临近、经期中、被冷落

@@ -198,6 +198,7 @@ struct StarDisplay: View {
 
 /// 空状态：两圈淡酒红的圆底托着图标，衬线标题，下面可以带一个主按钮
 struct EmptyState: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let symbol: String
     let title: String
     var message: String?
@@ -246,7 +247,24 @@ struct EmptyState: View {
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
         .onAppear {
-            withAnimation(.spring(duration: 0.6, bounce: 0.32)) { shown = true }
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.6, bounce: 0.32)) { shown = true }
+        }
+    }
+}
+
+struct FilterEmptyState: View {
+    let title: String
+    let actionTitle: String
+    let reset: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "magnifyingglass")
+        } description: {
+            Text("试试其他关键词，或清除当前筛选。")
+        } actions: {
+            Button(actionTitle, action: reset)
+                .buttonStyle(.quiet)
         }
     }
 }

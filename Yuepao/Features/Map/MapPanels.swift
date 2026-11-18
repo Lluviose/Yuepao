@@ -4,6 +4,7 @@ import MapKit
 // MARK: - 顶部：模式切换
 
 struct MapModeSwitcher: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var mode: MapMode
     @Namespace private var namespace
 
@@ -12,17 +13,18 @@ struct MapModeSwitcher: View {
             ForEach(MapMode.allCases) { m in
                 Button {
                     guard mode != m else { return }
-                    withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) { mode = m }
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.26)) { mode = m }
                 } label: {
                     Text(m.title)
+                        .multilineTextAlignment(.center)
                         .font(.subheadline.weight(mode == m ? .semibold : .regular))
-                        .foregroundStyle(mode == m ? Color.primary : Color.secondary)
+                        .foregroundStyle(mode == m ? Color.white : Color.primary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 36)
+                        .frame(minHeight: 44)
                         .background {
                             if mode == m {
                                 Capsule()
-                                    .fill(Color(uiColor: .tertiarySystemBackground))
+                                    .fill(Palette.wineGradient)
                                     .shadow(color: Color.black.opacity(0.1), radius: 4, y: 1)
                                     .matchedGeometryEffect(id: "thumb", in: namespace)
                             }

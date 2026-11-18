@@ -338,13 +338,14 @@ extension View {
 
 /// 胶囊、选择块、计数按钮按下去时轻轻缩一下，松手弹回
 struct ChipPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var scale: CGFloat = 0.94
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? scale : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? scale : 1)
             .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: configuration.isPressed)
     }
 }
 
@@ -367,6 +368,7 @@ extension View {
 
 /// 主按钮：酒红渐变的胶囊、白字。一个页面里最主要的那个操作用它
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// 撑满可用宽度
     var fill = false
     /// 底下带一圈酒红色的柔光；放在列表行里会被裁掉，就关掉
@@ -384,14 +386,15 @@ struct PrimaryButtonStyle: ButtonStyle {
             .shadow(color: Palette.wineBottom.opacity(glow ? (configuration.isPressed ? 0.12 : 0.3) : 0),
                     radius: 10, y: 5)
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: configuration.isPressed)
     }
 }
 
 /// 次要按钮：卡片底色、主题色的字和细描边，和主按钮并排时不抢戏
 struct SoftButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var fill = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -404,9 +407,9 @@ struct SoftButtonStyle: ButtonStyle {
             .background(Capsule().fill(Palette.surface))
             .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1))
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.75 : 1)
-            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: configuration.isPressed)
     }
 }
 
