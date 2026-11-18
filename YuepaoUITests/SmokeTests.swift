@@ -122,6 +122,9 @@ final class SmokeTests: XCTestCase {
         tapTab(app, "记录")
         XCTAssertTrue(app.staticTexts["测试"].firstMatch.waitForExistence(timeout: 5))
         shot(app, "a7-records")
+        app.staticTexts["测试"].firstMatch.tap()
+        XCTAssertTrue(scrollTo(app.staticTexts["喝咖啡"].firstMatch, in: app))
+        XCTAssertTrue(app.staticTexts["散步"].firstMatch.exists)
     }
 
     /// 向上滑动直到元素出现并可点击

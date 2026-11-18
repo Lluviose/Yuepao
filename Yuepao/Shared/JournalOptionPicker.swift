@@ -169,11 +169,19 @@ struct JournalOptionPicker: View {
                         prompt: "搜索或添加自定义选项")
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack {
+                    Text("已选 \(selection.count) 项")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                    Spacer()
                     Button("完成") { browsing = false }
+                        .buttonStyle(.wine)
                         .accessibilityIdentifier("done-\(key.rawValue)")
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(.regularMaterial)
             }
         }
         .presentationDragIndicator(.visible)
