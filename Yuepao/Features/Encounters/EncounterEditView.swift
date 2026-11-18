@@ -150,13 +150,13 @@ struct EncounterEditView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         whoCard.overlay(flashBorder("who")).id("who")
+                        dateCard.overlay(flashBorder("date")).id("date")
                         placeCard.overlay(flashBorder("place")).id("place")
                         timeCard.overlay(flashBorder("time")).id("time")
                         processCard.overlay(flashBorder("process")).id("process")
                         playCard.overlay(flashBorder("play")).id("play")
                         safetyCard.overlay(flashBorder("safety")).id("safety")
                         feelingCard.overlay(flashBorder("feeling")).id("feeling")
-                        dateCard.overlay(flashBorder("date")).id("date")
                         costCard.overlay(flashBorder("cost")).id("cost")
                         noteCard.overlay(flashBorder("note")).id("note")
                         photoCard.overlay(flashBorder("photo")).id("photo")
@@ -225,13 +225,13 @@ struct EncounterEditView: View {
         let feeling = rating > 0 || d.chemistry > 0 || !d.moods.isEmpty || !d.feedback.isEmpty || !d.aftercare.isEmpty
         return [
             FormRailItem(id: "who", title: "对象", filled: !girls.isEmpty),
+            FormRailItem(id: "date", title: "约会", filled: !d.activities.isEmpty || !d.initiator.isEmpty),
             FormRailItem(id: "place", title: "地点", filled: place != nil),
             FormRailItem(id: "time", title: "时长", filled: durationMinutes > 0 || overnight),
             FormRailItem(id: "process", title: "过程", filled: d.intensity > 0 || d.herOrgasms >= 0 || !d.lead.isEmpty),
             FormRailItem(id: "play", title: "玩法", filled: !d.highlights.isEmpty),
             FormRailItem(id: "safety", title: "安全", filled: protection != .unrecorded),
             FormRailItem(id: "feeling", title: "感受", filled: feeling),
-            FormRailItem(id: "date", title: "约会", filled: !d.activities.isEmpty || !d.initiator.isEmpty),
             FormRailItem(id: "cost", title: "花费", filled: d.totalCost > 0),
             FormRailItem(id: "note", title: "备注", filled: !d.notes.trimmed.isEmpty),
             FormRailItem(id: "photo", title: "照片", filled: !d.photoIDs.isEmpty)
@@ -733,7 +733,7 @@ struct EncounterEditView: View {
             ratingRow("化学反应", value: $details.chemistry, identifier: "chemistry")
             Divider()
             VStack(spacing: 0) {
-                TagDisclosure(title: "氛围", symbol: "theatermasks", key: .moods, selection: $details.moods)
+                JournalOptionPicker(title: "当时氛围", key: .moods, selection: $details.moods)
                 RowDivider()
                 TagDisclosure(title: "她的反馈", symbol: "text.bubble", key: .feedback, selection: $details.feedback)
                 RowDivider()
@@ -761,7 +761,7 @@ struct EncounterEditView: View {
 
     private var dateCard: some View {
         RecordCard("约会") {
-            TagDisclosure(title: "约会内容", symbol: "fork.knife", key: .activities, selection: $details.activities)
+            JournalOptionPicker(title: "约会内容", key: .activities, selection: $details.activities)
             Divider()
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "谁主动约的")

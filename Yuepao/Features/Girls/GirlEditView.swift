@@ -134,6 +134,7 @@ struct GirlEditView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         identityCard
+                        impressionCard.id("impression")
                         basicCard.id("basic")
                         metCard.id("met")
                         bodyCard.id("body")
@@ -213,12 +214,12 @@ struct GirlEditView: View {
     private var railItems: [FormRailItem] {
         let d = session.draft.details
         let basic = !d.realName.trimmed.isEmpty || d.birthday != nil || !d.mbti.isEmpty
-            || !d.personality.isEmpty || !d.tags.isEmpty
         let social = !d.occupation.isEmpty || !d.education.isEmpty || !d.school.isEmpty || !d.hometown.isEmpty
             || !d.maritalStatus.isEmpty || !d.district.isEmpty || !session.draft.city.trimmed.isEmpty || session.draft.coordinate != nil
         let harem = d.ratingLooks > 0 || d.ratingBody > 0 || d.ratingPersonality > 0 || d.ratingSex > 0
             || d.ratingOverall > 0 || d.awarenessLevel != .unset || d.contactGoalDays > 0
         var items = [
+            FormRailItem(id: "impression", title: "印象", filled: !d.personality.isEmpty || !d.tags.isEmpty),
             FormRailItem(id: "basic", title: "基本", filled: basic),
             FormRailItem(id: "met", title: "认识", filled: d.hasMetInfo),
             FormRailItem(id: "body", title: "身材", filled: d.hasBodyInfo),
@@ -397,13 +398,24 @@ struct GirlEditView: View {
         }
     }
 
+    private var impressionCard: some View {
+        let d = session.draft.details
+        let summary = FoldCardSummary.join([d.personality.joined(separator: "、"), d.tags.joined(separator: "、")])
+        return FoldCard("人物印象", symbol: "sparkles", summary: summary, tint: Palette.gift,
+                        expanded: isNew, identifier: "fold-impression", reveal: reveal["impression", default: 0]) {
+            JournalOptionPicker(title: "性格印象", key: .personality, selection: $session.draft.details.personality)
+            Divider()
+            TagDisclosure(title: "档案标签", symbol: "tag", key: .tags,
+                          selection: $session.draft.details.tags, tint: Palette.gold)
+        }
+    }
+
     // MARK: 基本信息
 
     private var basicSummary: String {
         let d = session.draft.details
         let age = Fmt.age(d.birthday).map { "\($0) 岁" }
-        return FoldCardSummary.join([age, Fmt.zodiac(d.birthday), d.mbti,
-                                     d.personality.prefix(3).joined(separator: "、")])
+        return FoldCardSummary.join([age, Fmt.zodiac(d.birthday), d.mbti])
     }
 
     private var basicCard: some View {
@@ -424,16 +436,6 @@ struct GirlEditView: View {
             VStack(alignment: .leading, spacing: 10) {
                 FieldLabel(title: "MBTI")
                 MBTIPicker(mbti: $session.draft.details.mbti)
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                FieldLabel(title: "性格")
-                TagCloud(key: .personality, selection: $session.draft.details.personality)
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                FieldLabel(title: "标签")
-                TagCloud(key: .tags, selection: $session.draft.details.tags, tint: Palette.gold)
             }
         }
     }

@@ -56,8 +56,15 @@ final class SmokeTests: XCTestCase {
         name.tap()
         name.typeText("测试")
         shot(app, "a2-edit")
-        // 收起键盘看一眼整页，再点开「基本信息」里的 MBTI
-        app.swipeUp()
+        app.buttons["rail-impression"].tap()
+        let gentle = app.buttons["tile-personality-温柔"]
+        XCTAssertTrue(gentle.waitForExistence(timeout: 5))
+        gentle.tap()
+        app.buttons["cycle-personality"].tap()
+        XCTAssertTrue(app.buttons["移除温柔"].exists)
+        shot(app, "a2c-impression")
+
+        app.buttons["rail-basic"].tap()
         sleep(1)
         let mbti = app.buttons["MBTI E"].firstMatch
         if mbti.exists && mbti.isHittable { mbti.tap() }
@@ -73,12 +80,27 @@ final class SmokeTests: XCTestCase {
         }
         XCTAssertTrue(log.waitForExistence(timeout: 5))
         sleep(1)
+        XCTAssertTrue(app.staticTexts["温柔"].firstMatch.exists)
         shot(app, "a4-detail")
         log.tap()
 
         let save = app.buttons["saveEncounter"].firstMatch
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         shot(app, "a5-encounter-edit")
+        app.buttons["rail-date"].tap()
+        app.buttons["tile-activities-散步"].tap()
+        app.buttons["browse-activities"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("咖啡")
+        let coffee = app.buttons["option-activities-喝咖啡"]
+        XCTAssertTrue(coffee.waitForExistence(timeout: 5))
+        coffee.tap()
+        app.buttons["done-activities"].tap()
+        XCTAssertTrue(app.buttons["移除散步"].exists)
+        XCTAssertTrue(app.buttons["移除喝咖啡"].exists)
+        shot(app, "a5b-date-options")
         save.tap()
 
         XCTAssertTrue(save.waitForNonExistence(timeout: 5))

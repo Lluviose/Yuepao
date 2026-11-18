@@ -126,9 +126,12 @@ struct TagChip: View {
                         .foregroundStyle(Color.accentColor.opacity(selected ? 1 : 0.7))
                 }
                 Text(title)
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.caption2)
+                    .accessibilityHidden(true)
             }
             .font(.subheadline)
-            .lineLimit(1)
+            .lineLimit(2)
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
             .foregroundStyle(selected ? tint : Color.primary.opacity(0.82))
@@ -139,12 +142,15 @@ struct TagChip: View {
         }
         .buttonStyle(.chip)
         .sensoryFeedback(.selection, trigger: selected)
+        .accessibilityLabel(title)
+        .accessibilityValue(marked ? "档案偏好" : "")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
 /// 一组可多选的标签，直接在页面里点选；长列表按类别分组，末尾可以现场加新选项
 struct TagCloud: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let key: OptionKey
     @Binding var selection: [String]
     var tint: Color = .accentColor
@@ -184,7 +190,7 @@ struct TagCloud: View {
         }
         .alert("添加\(key.title)", isPresented: $adding) {
             TextField("名称", text: $newName)
-            Button("添加") { add() }
+            Button("添加") { add() }.disabled(newName.trimmed.isEmpty)
             Button("取消", role: .cancel) { newName = "" }
         } message: {
             Text("会加进选项列表，以后都能选")
@@ -218,7 +224,7 @@ struct TagCloud: View {
     }
 
     private func toggle(_ option: String) {
-        withAnimation(.snappy(duration: 0.2)) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
             if let i = selection.firstIndex(of: option) {
                 selection.remove(at: i)
             } else {
@@ -233,7 +239,7 @@ struct TagCloud: View {
         guard !value.isEmpty else { return }
         config.addOption(value, to: key)
         if !selection.contains(value) {
-            withAnimation(.snappy(duration: 0.2)) { selection.append(value) }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection.append(value) }
         }
     }
 }
@@ -265,7 +271,7 @@ struct TagDisclosure: View {
                         Text(selection.isEmpty ? "未选择" : selection.joined(separator: "、"))
                             .font(.caption)
                             .foregroundStyle(selection.isEmpty ? HierarchicalShapeStyle.tertiary : HierarchicalShapeStyle.secondary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                     }
                     Spacer(minLength: 8)
                     if !selection.isEmpty {
@@ -286,6 +292,7 @@ struct TagDisclosure: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(expanded ? "已展开" : "已收起")
             .accessibilityIdentifier(identifier ?? "tags-\(key.rawValue)")
 
             if expanded {
